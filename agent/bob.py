@@ -5,24 +5,33 @@ Everything downstream (reasoning, correlation, plan, executor, verification)
 depends on the BobAnalysis model, never on this file's internals. Swapping the
 invocation mechanism means editing this file and nothing else.
 
-INVOCATION
-----------
-Bob Shell runs headless. Two CLI generations exist; we probe for both:
+INVOCATION — VERIFIED 2026-08-29
+---------------------------------
+IBM Bob on this machine is the Antigravity IDE (bobide.cmd / bobide-tunnel.exe)
+installed at D:\\Documents\\BoB\\IBM Bob\\bin\\.
 
-    Shell v2:  bob run --mode <slug> --output-format json "<prompt>"
-    Shell v1:  bob -p "<prompt>"
+IBM Bob v1.126.0+bob2.0.3 has NO headless subprocess stdout mode:
 
->>> VERIFY THE EXACT FLAGS AGAINST `bob run --help` ON YOUR MACHINE AND FIX
->>> `_build_argv` BELOW. Everything else in this file is invocation-agnostic.
+  bobide.cmd chat -m <mode> "<prompt>"   → opens GUI, no stdout, exit 0
+  bobide.cmd                             → opens GUI window
+  bobide-tunnel.exe agent host           → starts local HTTP server BUT requires
+                                          the IDE to be running as supervisor
 
-The analyst mode is read-only by construction (see .bob/custom_modes.yaml),
-so a Bob invocation cannot mutate the cluster no matter what it returns.
+The only programmatic API is the cloud RemoteAgent REST endpoint:
+  POST https://cloud.manufact.com/api/v1/chats
+  POST https://cloud.manufact.com/api/v1/chats/{id}/execute
+  Header: x-api-key: <KUBEMEDIC_BOB_API_KEY>
+
+_build_argv() is intentionally left returning [] to signal "no subprocess path".
+The analyze() function checks BOB_API_KEY and uses the REST API when available,
+otherwise returns bob_unavailable — it never fabricates a result.
 
 FAILURE POLICY
 --------------
-If Bob is unavailable we return status="bob_unavailable". We never synthesize
-an analysis and label it as Bob's. The dashboard surfaces the outage, the
-incident does not advance, and the audit record says so.
+If Bob is unavailable (key absent, network error, timeout) we return
+status="bob_unavailable". We never synthesize an analysis and label it as
+Bob's. The dashboard surfaces the outage, the incident does not advance, and
+the audit record says so.
 """
 
 from __future__ import annotations
@@ -32,6 +41,8 @@ import logging
 import os
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,8 +52,14 @@ log = logging.getLogger("kubemedic.bob")
 
 BOB_MODE = os.getenv("KUBEMEDIC_BOB_MODE", "kubemedic-analyst")
 BOB_TIMEOUT = int(os.getenv("KUBEMEDIC_BOB_TIMEOUT_SECONDS", "180"))
-BOB_BINARY = os.getenv("KUBEMEDIC_BOB_BINARY", "bob")
+BOB_BINARY = os.getenv("KUBEMEDIC_BOB_BINARY", "bobide")
 WORKSPACE = Path(os.getenv("KUBEMEDIC_WORKSPACE", ".")).resolve()
+
+# Cloud REST API (set KUBEMEDIC_BOB_API_KEY to enable the RemoteAgent path).
+# Get your key from https://cloud.manufact.com after logging in with IBM Bob.
+BOB_API_KEY = os.getenv("KUBEMEDIC_BOB_API_KEY", "")
+BOB_API_BASE = os.getenv("KUBEMEDIC_BOB_API_BASE", "https://cloud.manufact.com")
+BOB_AGENT_ID = os.getenv("KUBEMEDIC_BOB_AGENT_ID", "")  # agent ID from cloud console
 
 
 class BobUnavailable(RuntimeError):
@@ -101,81 +118,169 @@ No prose, no markdown fences.
 
 def _build_argv(prompt: str) -> list[str]:
     """
-    >>> ADJUST HERE after checking `bob run --help` / `bob --help`.
-    Probe order: Shell v2 `bob run`, then Shell v1 `bob -p`.
+    IBM Bob v1.126.0 (Antigravity IDE / bobide) has no headless stdout mode.
+    bobide.cmd chat opens the GUI with zero stdout. There is no subprocess path.
+    Returns [] to signal "no subprocess invocation available" to analyze().
+    The REST API path in analyze() is used instead when BOB_API_KEY is set.
     """
-    if _supports_subcommand("run"):
-        return [
-            BOB_BINARY, "run",
-            "--mode", BOB_MODE,
-            "--output-format", "json",
-            prompt,
-        ]
-    return [BOB_BINARY, "-p", prompt]
+    return []
 
 
-def _supports_subcommand(name: str) -> bool:
-    try:
-        out = subprocess.run(
-            [BOB_BINARY, "--help"],
-            capture_output=True, text=True, timeout=15,
+def _find_binary() -> str | None:
+    """Return the resolved path to the bobide binary, or None."""
+    # Honour the env override first
+    binary = BOB_BINARY
+    resolved = shutil.which(binary)
+    if resolved:
+        return resolved
+    # Common install location on Windows when PATH is stale
+    win_path = r"D:\Documents\BoB\IBM Bob\bin\bobide.cmd"
+    if os.path.isfile(win_path):
+        return win_path
+    return None
+
+
+def _rest_analyze(
+    prompt: str,
+    started: datetime,
+) -> BobResult:
+    """
+    Use the IBM Bob cloud RemoteAgent REST API when BOB_API_KEY is set.
+
+    Protocol (from extension.js RemoteAgent class):
+      1. POST {base}/api/v1/chats  body={title, agent_id, type}  → {id}
+      2. POST {base}/api/v1/chats/{id}/execute  body={query, max_steps} → result
+
+    Requires KUBEMEDIC_BOB_API_KEY and KUBEMEDIC_BOB_AGENT_ID.
+    """
+    if not BOB_API_KEY:
+        return _fail(
+            "IBM Bob REST API not configured: set KUBEMEDIC_BOB_API_KEY and "
+            "KUBEMEDIC_BOB_AGENT_ID in the environment to enable the cloud path",
+            ["rest-api", BOB_API_BASE],
+            started,
         )
-        return name in (out.stdout + out.stderr)
-    except Exception:
-        return False
+    if not BOB_AGENT_ID:
+        return _fail(
+            "IBM Bob REST API not configured: KUBEMEDIC_BOB_AGENT_ID is unset. "
+            "Find your agent ID in the IBM Bob cloud console.",
+            ["rest-api", BOB_API_BASE],
+            started,
+        )
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": BOB_API_KEY,
+    }
+    invocation = [f"REST:{BOB_API_BASE}/api/v1/chats", f"agent_id={BOB_AGENT_ID}"]
+
+    # Step 1: create chat session
+    chat_url = f"{BOB_API_BASE}/api/v1/chats"
+    chat_body = json.dumps({
+        "title": f"KubeMedic incident analysis — mode:{BOB_MODE}",
+        "agent_id": BOB_AGENT_ID,
+        "type": "agent_execution",
+    }).encode()
+    try:
+        req = urllib.request.Request(chat_url, data=chat_body, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            chat_id = json.loads(resp.read().decode()).get("id")
+        if not chat_id:
+            return _fail("IBM Bob REST: chat creation returned no id", invocation, started)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:400]
+        return _fail(f"IBM Bob REST chat create {exc.code}: {body}", invocation, started)
+    except Exception as exc:
+        return _fail(f"IBM Bob REST chat create failed: {exc}", invocation, started)
+
+    # Step 2: execute in the chat
+    run_url = f"{BOB_API_BASE}/api/v1/chats/{chat_id}/execute"
+    run_body = json.dumps({"query": prompt, "max_steps": 20}).encode()
+    try:
+        req = urllib.request.Request(run_url, data=run_body, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=BOB_TIMEOUT) as resp:
+            raw = resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:400]
+        if exc.code == 401:
+            return _fail("IBM Bob REST: authentication failed — check KUBEMEDIC_BOB_API_KEY", invocation, started)
+        return _fail(f"IBM Bob REST execute {exc.code}: {body}", invocation, started)
+    except Exception as exc:
+        return _fail(f"IBM Bob REST execute failed: {exc}", invocation, started)
+
+    elapsed = _ms(started)
+    try:
+        result_data = json.loads(raw)
+    except json.JSONDecodeError:
+        result_data = raw  # will be handled by _extract_json on the raw string
+
+    # The execute endpoint returns the final result directly (not wrapped in raw)
+    try:
+        if isinstance(result_data, dict):
+            # Unwrap {"result": ...} envelope if present
+            if "result" in result_data:
+                inner = result_data["result"]
+                if isinstance(inner, dict):
+                    analysis = inner
+                elif isinstance(inner, str):
+                    analysis = _extract_json(inner)
+                else:
+                    analysis = _extract_json(raw)
+            elif "hypotheses" in result_data or "status" in result_data:
+                analysis = result_data
+            else:
+                analysis = _extract_json(raw)
+        else:
+            analysis = _extract_json(str(result_data))
+    except ValueError as exc:
+        return _fail(
+            f"IBM Bob REST returned unparseable output: {exc}",
+            invocation, started, raw=raw,
+        )
+
+    analysis.setdefault("analysis_source", "ibm-bob")
+    log.info("[BOB] REST ok in %dms", elapsed)
+    return BobResult(
+        ok=True, analysis=analysis, raw_stdout=raw,
+        invocation=invocation, duration_ms=elapsed,
+    )
 
 
 def analyze(evidence: dict[str, Any], tickets: list[dict[str, Any]]) -> BobResult:
-    """Send structured evidence to IBM Bob. Return its structured analysis."""
-    started = datetime.now(timezone.utc)
+    """Send structured evidence to IBM Bob. Return its structured analysis.
 
-    if shutil.which(BOB_BINARY) is None:
-        return _fail(
-            f"IBM Bob CLI '{BOB_BINARY}' not found on PATH", [], started
-        )
+    Invocation order:
+      1. If BOB_API_KEY is set → use IBM Bob cloud REST API (RemoteAgent).
+      2. Otherwise → bob_unavailable (no fabrication, ever).
+
+    IBM Bob v1.126.0 (bobide) is a GUI IDE with no headless subprocess mode.
+    The subprocess path (_build_argv) returns [] for documentation purposes.
+    """
+    started = datetime.now(timezone.utc)
 
     prompt = PROMPT_TEMPLATE.format(
         evidence=json.dumps(evidence, indent=2, default=str),
         tickets=json.dumps(tickets, indent=2, default=str),
     )
-    argv = _build_argv(prompt)
-    log.info("[BOB] invoking mode=%s timeout=%ss", BOB_MODE, BOB_TIMEOUT)
 
-    try:
-        proc = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=BOB_TIMEOUT,
-            cwd=WORKSPACE,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return _fail(f"IBM Bob timed out after {BOB_TIMEOUT}s", argv, started)
-    except OSError as exc:
-        return _fail(f"IBM Bob invocation failed: {exc}", argv, started)
+    # REST path: use when API key is configured
+    if BOB_API_KEY:
+        log.info("[BOB] invoking via REST API mode=%s timeout=%ss", BOB_MODE, BOB_TIMEOUT)
+        return _rest_analyze(prompt, started)
 
-    elapsed = _ms(started)
-
-    if proc.returncode != 0:
-        return _fail(
-            f"IBM Bob exited {proc.returncode}: {proc.stderr[:400]}",
-            argv, started, raw=proc.stdout,
-        )
-
-    try:
-        analysis = _extract_json(proc.stdout)
-    except ValueError as exc:
-        return _fail(
-            f"IBM Bob returned unparseable output: {exc}",
-            argv, started, raw=proc.stdout,
-        )
-
-    analysis.setdefault("analysis_source", "ibm-bob")
-    log.info("[BOB] ok in %dms", elapsed)
-    return BobResult(
-        ok=True, analysis=analysis, raw_stdout=proc.stdout,
-        invocation=_redact(argv), duration_ms=elapsed,
+    # No subprocess path exists for this IBM Bob version.
+    # Log the binary search so the error is actionable.
+    binary_path = _find_binary()
+    binary_note = (
+        f"found at {binary_path} but has no headless stdout mode"
+        if binary_path
+        else f"'{BOB_BINARY}' not found on PATH"
+    )
+    return _fail(
+        f"IBM Bob unavailable: {binary_note}. "
+        "Set KUBEMEDIC_BOB_API_KEY + KUBEMEDIC_BOB_AGENT_ID to enable the REST path.",
+        [],
+        started,
     )
 
 
