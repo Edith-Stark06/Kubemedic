@@ -1,0 +1,27 @@
+{
+  "//": "KubeMedic project MCP configuration. Committed to the repo so the whole team and any judge sees the same tool surface.",
+  "//safety": "READ ONLY. There is deliberately no mutation server registered here. Bob has no tool that can change the cluster. Mutation lives in agent/executor.py behind the human approval gate.",
+  "mcpServers": {
+    "kubemedic-evidence": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server", "--profile", "evidence"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "KUBEMEDIC_NAMESPACE": "${KUBERNETES_NAMESPACE}",
+        "KUBEMEDIC_DEPLOYMENT": "${KUBERNETES_DEPLOYMENT}",
+        "KUBEMEDIC_MCP_PROFILE": "evidence",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "disabled": false,
+      "alwaysAllow": [
+        "get_workload_status",
+        "get_pods",
+        "get_events",
+        "get_application_health",
+        "get_workload_snapshot",
+        "list_tickets",
+        "get_ticket"
+      ]
+    }
+  }
+}
