@@ -1,0 +1,28 @@
+﻿# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environment -- never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Kubernetes config
+kubeconfig
+*.kubeconfig
+kubeconfig.*
+.kube/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
