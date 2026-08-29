@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KubeMedic — Incident Console</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <span class="site-header__brand">KubeMedic</span>
+      <span class="site-header__subtitle">Incident Console</span>
+    </div>
+  </header>
+
+  <main class="page-main">
+    {% if error %}
+    <div class="alert alert--error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <h1 class="page-title">Active Incidents</h1>
+
+    {% if not incidents %}
+    <div class="empty-state">
+      <p class="empty-state__text">No active incidents.</p>
+      <p class="empty-state__sub">The cluster is healthy or no incidents have been detected yet.</p>
+    </div>
+    {% else %}
+    <ul class="incident-list" role="list">
+      {% for inc in incidents %}
+      <li class="incident-card">
+        <a class="incident-card__link" href="/incident/{{ inc.incident_id }}">
+          <div class="incident-card__header">
+            <span class="incident-card__id">{{ inc.incident_id }}</span>
+            <span class="badge badge--{{ inc.state | lower | replace('_', '-') }}">
+              {{ inc.state | state_label }}
+            </span>
+          </div>
+          <div class="incident-card__meta">
+            <span class="incident-card__workload">{{ inc.workload }}</span>
+            <span class="incident-card__count">{{ inc.ticket_count }} ticket{% if inc.ticket_count != 1 %}s{% endif %}</span>
+            <span class="incident-card__age">{{ inc.updated_at | rel_time }}</span>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </main>
+
+  <footer class="site-footer">
+    <span>KubeMedic — IBM TechXchange 2026 Dev Day Hackathon</span>
+  </footer>
+</body>
+</html>
