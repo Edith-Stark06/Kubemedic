@@ -14,17 +14,31 @@
 <header class="incident-header" id="incident-header">
   <div class="incident-header__inner">
     <a class="incident-header__back" href="/">← Back</a>
-    <span class="incident-header__id">{{ incident.incident_id }}</span>
+
+    <div class="incident-header__id-group">
+      <span class="incident-header__brand">KubeMedic</span>
+      <span class="incident-header__sep">/</span>
+      <span class="incident-header__id">{{ incident.incident_id }}</span>
+    </div>
+
     <span class="badge badge--{{ incident.state | lower | replace('_', '-') }} badge--large" id="status-badge">
       {{ incident.state | state_label }}
     </span>
+
+    {% if incident.state == 'PENDING_APPROVAL' %}
+    <span class="incident-header__action-pill">Action Required</span>
+    {% endif %}
+
     <span class="incident-header__workload">
       {% if incident.evidence %}
-        {{ incident.evidence.deployment_name }} / {{ incident.evidence.namespace }}
+        <span class="incident-header__workload-icon">⬡</span>
+        {{ incident.evidence.deployment_name }}
+        <span class="incident-header__ns">{{ incident.evidence.namespace }}</span>
       {% else %}
         Unknown workload
       {% endif %}
     </span>
+
     <span class="incident-header__age">{{ incident.created_at | rel_time }}</span>
   </div>
 </header>
@@ -34,30 +48,129 @@
   data-reviewer="{{ reviewer }}">
 
   <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- LIFECYCLE STATUS STRIP                                      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="lifecycle-strip" id="lifecycle-strip" aria-label="Incident lifecycle">
+    {% set steps = [
+      ('OPEN',             'Incident',       'OPEN'),
+      ('EVIDENCE',         'Evidence',       'EVIDENCE_COLLECTED'),
+      ('ANALYSIS',         'Analysis',       'ANALYSED'),
+      ('RECOMMENDATION',   'Recommendation', 'PENDING_APPROVAL'),
+      ('HUMAN_REVIEW',     'Human Review',   'PENDING_APPROVAL'),
+      ('EXECUTION',        'Execution',      'EXECUTING'),
+      ('VERIFICATION',     'Verification',   'VERIFIED')
+    ] %}
+    {% set state = incident.state %}
+    {% set state_order = ['OPEN','EVIDENCE_COLLECTED','EVIDENCE_FAILED','ANALYSED','BOB_UNAVAILABLE','PENDING_APPROVAL','APPROVED','REJECTED','FEEDBACK_RECORDED','EXECUTING','EXECUTED','VERIFIED','RESOLVED','VERIFICATION_FAILED'] %}
+    {% set cur_idx = state_order.index(state) if state in state_order else 0 %}
+    {% set step_states = ['OPEN','EVIDENCE_COLLECTED','ANALYSED','PENDING_APPROVAL','PENDING_APPROVAL','EXECUTING','VERIFIED'] %}
+
+    {% for step_key, step_label, step_state in steps %}
+      {% set step_idx = state_order.index(step_state) if step_state in state_order else 0 %}
+      {% if state in ['EVIDENCE_FAILED'] and step_key == 'EVIDENCE' %}
+        {% set step_cls = 'failed' %}
+      {% elif state in ['BOB_UNAVAILABLE'] and step_key == 'ANALYSIS' %}
+        {% set step_cls = 'failed' %}
+      {% elif state in ['VERIFICATION_FAILED'] and step_key == 'VERIFICATION' %}
+        {% set step_cls = 'failed' %}
+      {% elif state in ['REJECTED','FEEDBACK_RECORDED'] and step_key in ['EXECUTION','VERIFICATION'] %}
+        {% set step_cls = 'blocked' %}
+      {% elif cur_idx > step_idx %}
+        {% set step_cls = 'done' %}
+      {% elif cur_idx == step_idx %}
+        {% set step_cls = 'current' %}
+      {% else %}
+        {% set step_cls = 'pending' %}
+      {% endif %}
+      <div class="lifecycle-step lifecycle-step--{{ step_cls }}" title="{{ step_label }}">
+        <div class="lifecycle-step__dot"></div>
+        <span class="lifecycle-step__label">{{ step_label }}</span>
+      </div>
+      {% if not loop.last %}
+      <div class="lifecycle-connector lifecycle-connector--{{ step_cls }}"></div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- INCIDENT STORY STRIP — presentation layer only             -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="story-strip">
+    <div class="story-step {% if incident.evidence or incident.correlation %}story-step--answered{% endif %}">
+      <span class="story-step__q">What happened?</span>
+      {% if incident.correlation %}
+      <span class="story-step__a">{{ incident.tickets | length }} ticket{% if incident.tickets | length != 1 %}s{% endif %} correlated into one incident</span>
+      {% else %}
+      <span class="story-step__a story-step__a--pending">Collecting evidence…</span>
+      {% endif %}
+    </div>
+    <div class="story-step {% if incident.analysis and not incident.analysis.is_unavailable %}story-step--answered{% endif %}">
+      <span class="story-step__q">Root cause?</span>
+      {% if incident.analysis and incident.analysis.root_cause %}
+      <span class="story-step__a">{{ incident.analysis.root_cause.confidence | upper }} confidence</span>
+      {% else %}
+      <span class="story-step__a story-step__a--pending">Awaiting IBM Bob analysis</span>
+      {% endif %}
+    </div>
+    <div class="story-step {% if incident.plan %}story-step--answered{% endif %}">
+      <span class="story-step__q">Recommendation?</span>
+      {% if incident.plan %}
+      <span class="story-step__a">{{ incident.plan.action | action_label }}</span>
+      {% else %}
+      <span class="story-step__a story-step__a--pending">No plan yet</span>
+      {% endif %}
+    </div>
+    <div class="story-step {% if incident.human_decision %}story-step--answered{% elif incident.state == 'PENDING_APPROVAL' %}story-step--current{% endif %}">
+      <span class="story-step__q">Human decision?</span>
+      {% if incident.human_decision %}
+      <span class="story-step__a">{{ incident.human_decision.decision | upper }} by {{ incident.human_decision.approver }}</span>
+      {% elif incident.state == 'PENDING_APPROVAL' %}
+      <span class="story-step__a story-step__a--action">Awaiting your decision</span>
+      {% else %}
+      <span class="story-step__a story-step__a--pending">Not yet reached</span>
+      {% endif %}
+    </div>
+    <div class="story-step {% if incident.verification and incident.verification.outcome == 'PASS' %}story-step--answered{% elif incident.verification and incident.verification.outcome == 'FAIL' %}story-step--failed{% endif %}">
+      <span class="story-step__q">Recovery verified?</span>
+      {% if incident.verification %}
+      <span class="story-step__a {% if incident.verification.outcome == 'FAIL' %}story-step__a--fail{% endif %}">{{ incident.verification.outcome }}</span>
+      {% else %}
+      <span class="story-step__a story-step__a--pending">Not yet</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- PANEL 1 — CORRELATED TICKETS                               -->
   <!-- ═══════════════════════════════════════════════════════════ -->
   {% if incident.correlation %}
   <section class="panel" id="panel-correlation">
-    <h2 class="panel__title">Correlated Tickets</h2>
+    <h2 class="panel__title">
+      <span class="panel__title-icon">◈</span>
+      Correlated Tickets
+      <span class="panel__title-count">{{ incident.tickets | length }}</span>
+    </h2>
     <div class="correlation-layout">
       <!-- Ticket chips -->
       <div class="correlation-tickets" role="list">
         {% for ticket in incident.tickets %}
         <div class="ticket-chip" role="listitem">
-          <span class="ticket-chip__id">{{ ticket.ticket_id }}</span>
-          {% if ticket.severity %}
-          <span class="badge badge--sev-{{ ticket.severity }}">{{ ticket.severity }}</span>
-          {% endif %}
+          <div class="ticket-chip__row">
+            <span class="ticket-chip__id">{{ ticket.ticket_id }}</span>
+            {% if ticket.severity %}
+            <span class="badge badge--sev-{{ ticket.severity }}">{{ ticket.severity }}</span>
+            {% endif %}
+            {% if ticket.created_at %}
+            <span class="ticket-chip__age">{{ ticket.created_at | rel_time }}</span>
+            {% endif %}
+          </div>
           <p class="ticket-chip__symptom">{{ ticket.reported_symptom or "No symptom recorded" }}</p>
-          {% if ticket.created_at %}
-          <span class="ticket-chip__age">{{ ticket.created_at | rel_time }}</span>
-          {% endif %}
         </div>
         {% endfor %}
 
         {% if incident.correlation.excluded_tickets %}
         <div class="correlation-excluded">
-          <span class="correlation-excluded__label">Excluded from this incident:</span>
+          <span class="correlation-excluded__label">Excluded — kept separate:</span>
           {% for ex in incident.correlation.excluded_tickets %}
           <span class="ticket-chip ticket-chip--excluded">{{ ex }}</span>
           {% endfor %}
@@ -80,7 +193,6 @@
       </div>
     </div>
 
-    <!-- Correlation basis -->
     {% if incident.correlation.correlation_basis %}
     <div class="correlation-basis">
       <p class="correlation-basis__title">Correlated because:</p>
@@ -97,9 +209,9 @@
     {% endif %}
 
     <div class="correlation-contrast">
-      <span><strong>Without correlation:</strong> {{ incident.tickets | length }} incident{% if incident.tickets | length != 1 %}s{% endif %}, {{ incident.tickets | length }} investigation{% if incident.tickets | length != 1 %}s{% endif %}, {{ incident.tickets | length }} engineer{% if incident.tickets | length != 1 %}s{% endif %}</span>
+      <span><strong>Without correlation:</strong> {{ incident.tickets | length }} separate investigation{% if incident.tickets | length != 1 %}s{% endif %}</span>
       <span class="correlation-contrast__sep">→</span>
-      <span><strong>With correlation:</strong> 1 incident, 1 root cause, 1 decision</span>
+      <span><strong>With correlation:</strong> 1 incident · 1 root cause · 1 decision</span>
     </div>
   </section>
   {% endif %}
@@ -109,7 +221,10 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   {% if incident.state == 'EVIDENCE_FAILED' %}
   <section class="panel panel--failure" id="panel-evidence-failed">
-    <h2 class="panel__title panel__title--failure">Evidence Collection Failed</h2>
+    <h2 class="panel__title panel__title--failure">
+      <span class="panel__title-icon">✕</span>
+      Evidence Collection Failed
+    </h2>
     {% if incident.analysis and incident.analysis.missing_signals %}
     <p class="failure-note">Missing signals:</p>
     <ul class="failure-list">
@@ -122,13 +237,57 @@
   </section>
   {% elif incident.evidence %}
   <section class="panel" id="panel-evidence">
-    <h2 class="panel__title">Evidence</h2>
+    <h2 class="panel__title">
+      <span class="panel__title-icon">◎</span>
+      Evidence
+    </h2>
+
+    <!-- Evidence summary cards -->
+    <div class="evidence-summary-grid">
+      {% if incident.evidence.pod_states %}
+      <div class="evidence-summary-card
+        {% set not_ready = incident.evidence.pod_states | selectattr('ready', 'defined') | list %}
+        evidence-summary-card--{{ 'warn' if incident.evidence.pod_states | selectattr('ready', 'equalto', '0/1') | list else 'ok' }}">
+        <span class="evidence-summary-card__icon">⬡</span>
+        <span class="evidence-summary-card__label">Pod Health</span>
+        <span class="evidence-summary-card__count">{{ incident.evidence.pod_states | length }} pods</span>
+      </div>
+      {% endif %}
+      {% if incident.evidence.events %}
+      <div class="evidence-summary-card evidence-summary-card--warn">
+        <span class="evidence-summary-card__icon">⚡</span>
+        <span class="evidence-summary-card__label">K8s Events</span>
+        <span class="evidence-summary-card__count">{{ incident.evidence.events | length }} event{% if incident.evidence.events | length != 1 %}s{% endif %}</span>
+      </div>
+      {% endif %}
+      {% if incident.evidence.rollout_history %}
+      <div class="evidence-summary-card evidence-summary-card--info">
+        <span class="evidence-summary-card__icon">↻</span>
+        <span class="evidence-summary-card__label">Rollout History</span>
+        <span class="evidence-summary-card__count">{{ incident.evidence.rollout_history | length }} revision{% if incident.evidence.rollout_history | length != 1 %}s{% endif %}</span>
+      </div>
+      {% endif %}
+      {% if incident.evidence.application_health %}
+      <div class="evidence-summary-card evidence-summary-card--{{ 'ok' if incident.evidence.application_health.healthy else 'err' }}">
+        <span class="evidence-summary-card__icon">♡</span>
+        <span class="evidence-summary-card__label">App Health</span>
+        <span class="evidence-summary-card__count">HTTP {{ incident.evidence.application_health.status_code or '?' }}</span>
+      </div>
+      {% endif %}
+      {% if incident.correlation %}
+      <div class="evidence-summary-card evidence-summary-card--ok">
+        <span class="evidence-summary-card__icon">◈</span>
+        <span class="evidence-summary-card__label">Ticket Correlation</span>
+        <span class="evidence-summary-card__count">{{ incident.tickets | length }} tickets</span>
+      </div>
+      {% endif %}
+    </div>
+
     <div class="evidence-meta">
       <span>Collected: <strong>{{ incident.evidence.collected_at }}</strong></span>
       <span>Namespace: <strong>{{ incident.evidence.namespace }}</strong></span>
     </div>
 
-    <!-- Pods -->
     {% if incident.evidence.pod_states %}
     <h3 class="panel__subtitle">Pods</h3>
     <table class="data-table">
@@ -149,7 +308,6 @@
     </table>
     {% endif %}
 
-    <!-- Events -->
     {% if incident.evidence.events %}
     <h3 class="panel__subtitle">Kubernetes Events</h3>
     <table class="data-table">
@@ -170,7 +328,6 @@
     </table>
     {% endif %}
 
-    <!-- Rollout History -->
     {% if incident.evidence.rollout_history %}
     <h3 class="panel__subtitle">Rollout History</h3>
     <table class="data-table">
@@ -190,7 +347,6 @@
     </table>
     {% endif %}
 
-    <!-- Application Health -->
     {% if incident.evidence.application_health %}
     <h3 class="panel__subtitle">Application Health</h3>
     <div class="health-row">
@@ -205,7 +361,6 @@
     <p class="health-note">{{ incident.evidence.application_health.note }}</p>
     {% endif %}
 
-    <!-- Dual-signal note if present -->
     {% if incident.analysis and incident.analysis.dual_signal_note %}
     <div class="dual-signal-note">
       <span class="dual-signal-note__icon">⚠</span>
@@ -221,7 +376,10 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   {% if incident.state == 'BOB_UNAVAILABLE' %}
   <section class="panel panel--failure" id="panel-bob-unavailable">
-    <h2 class="panel__title panel__title--failure">IBM Bob Unavailable</h2>
+    <h2 class="panel__title panel__title--failure">
+      <span class="panel__title-icon">✕</span>
+      IBM Bob Unavailable
+    </h2>
     <p class="failure-note">IBM Bob could not be reached. No analysis has been performed.</p>
     <p class="failure-note">The incident cannot advance until Bob is reachable and analysis completes.</p>
     {% if incident.analysis and incident.analysis.missing_signals %}
@@ -235,28 +393,32 @@
   {% elif incident.analysis and incident.analysis.analysis_source != 'unavailable' %}
   <section class="panel" id="panel-analysis">
     <h2 class="panel__title">
+      <span class="panel__title-icon">◉</span>
       IBM Bob Analysis
       <span class="panel__source-tag">analysis_source: {{ incident.analysis.analysis_source }}</span>
     </h2>
 
-    <!-- Root Cause -->
+    <!-- Root Cause — most prominent element -->
     {% if incident.analysis.root_cause %}
     <div class="root-cause-block">
-      <h3 class="panel__subtitle">Root Cause</h3>
-      <p class="root-cause-statement">
-        {{ incident.analysis.root_cause.statement }}
-        {% if incident.analysis.root_cause.is_inference %}
-        <span class="inference-tag">INFERENCE</span>
-        {% endif %}
-      </p>
-      <div class="confidence-row">
-        <span class="confidence-level confidence--{{ incident.analysis.root_cause.confidence }}">
-          {{ incident.analysis.root_cause.confidence | upper }} CONFIDENCE
-        </span>
-        {% if incident.analysis.root_cause.confidence_reason %}
-        <span class="confidence-reason">— {{ incident.analysis.root_cause.confidence_reason }}</span>
-        {% endif %}
+      <div class="root-cause-block__header">
+        <span class="root-cause-block__heading">Likely Root Cause</span>
+        <div class="confidence-row">
+          <span class="confidence-level confidence--{{ incident.analysis.root_cause.confidence }}">
+            {{ incident.analysis.root_cause.confidence | upper }} CONFIDENCE
+          </span>
+          {% if incident.analysis.root_cause.is_inference %}
+          <span class="inference-tag">INFERENCE</span>
+          {% endif %}
+        </div>
       </div>
+      <p class="root-cause-statement">{{ incident.analysis.root_cause.statement }}</p>
+      {% if incident.analysis.root_cause.confidence_reason %}
+      <p class="root-cause-reason">
+        <span class="root-cause-reason__label">Reasoning:</span>
+        {{ incident.analysis.root_cause.confidence_reason }}
+      </p>
+      {% endif %}
     </div>
     {% endif %}
 
@@ -269,6 +431,7 @@
         <div class="hypothesis-card__header">
           <span class="hypothesis-card__rank">#{{ h.rank }}</span>
           <span class="confidence-level confidence--{{ h.confidence }}">{{ h.confidence | upper }}</span>
+          <span class="hypothesis-card__rank-label">{{ "Primary hypothesis" if loop.first else "Alternative hypothesis" }}</span>
         </div>
         <p class="hypothesis-card__statement">{{ h.statement }}</p>
         <p class="hypothesis-card__reason">{{ h.confidence_reason }}</p>
@@ -315,9 +478,11 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   {% if incident.plan %}
   <section class="panel" id="panel-plan">
-    <h2 class="panel__title">Proposed Remediation</h2>
+    <h2 class="panel__title">
+      <span class="panel__title-icon">⟳</span>
+      Proposed Remediation
+    </h2>
 
-    <!-- Notes for reviewer — most prominent if present -->
     {% if incident.plan.notes_for_reviewer %}
     <div class="reviewer-note">
       <span class="reviewer-note__label">Note for reviewer:</span>
@@ -325,46 +490,41 @@
     </div>
     {% endif %}
 
-    <div class="plan-grid">
-      <div class="plan-field">
-        <span class="plan-field__label">Action</span>
-        <span class="plan-field__value">{{ incident.plan.action | action_label }}</span>
-      </div>
-      <div class="plan-field">
-        <span class="plan-field__label">Target</span>
-        <span class="plan-field__value monospace">{{ incident.plan.target }}</span>
-      </div>
-      {% if incident.plan.action_parameters %}
-      <div class="plan-field">
-        <span class="plan-field__label">Parameters</span>
-        <span class="plan-field__value monospace">
-          {% for k, v in incident.plan.action_parameters.items() %}{{ k }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+    <!-- Impact card — the things that matter most -->
+    <div class="impact-card">
+      <div class="impact-card__action">
+        <span class="impact-card__action-verb">{{ incident.plan.action | action_label }}</span>
+        <span class="impact-card__action-target monospace">{{ incident.plan.target }}</span>
+        {% if incident.plan.action_parameters %}
+        <span class="impact-card__action-params monospace">
+          {% for k, v in incident.plan.action_parameters.items() %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}
         </span>
+        {% endif %}
       </div>
-      {% endif %}
+      <div class="impact-card__metrics">
+        <div class="impact-metric">
+          <span class="impact-metric__label">Risk</span>
+          <span class="impact-metric__value"><span class="risk-badge risk-badge--{{ incident.plan.risk }}">{{ incident.plan.risk | upper }}</span></span>
+        </div>
+        <div class="impact-metric">
+          <span class="impact-metric__label">Reversible</span>
+          <span class="impact-metric__value {{ 'text--ok' if incident.plan.reversible else 'text--warning' }}">{{ "Yes" if incident.plan.reversible else "No" }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="plan-grid">
       <div class="plan-field plan-field--full">
         <span class="plan-field__label">Blast Radius</span>
-        <span class="plan-field__value">{{ incident.plan.blast_radius or "—" }}</span>
-      </div>
-      <div class="plan-field">
-        <span class="plan-field__label">Risk</span>
-        <span class="plan-field__value">
-          <span class="risk-badge risk-badge--{{ incident.plan.risk }}">{{ incident.plan.risk | upper }}</span>
-        </span>
+        <span class="plan-field__value">{{ incident.plan.blast_radius or "Not provided" }}</span>
       </div>
       <div class="plan-field plan-field--full">
-        <span class="plan-field__label">Risk explanation</span>
-        <span class="plan-field__value">{{ incident.plan.risk_explanation or "—" }}</span>
-      </div>
-      <div class="plan-field">
-        <span class="plan-field__label">Reversible?</span>
-        <span class="plan-field__value {{ 'text--ok' if incident.plan.reversible else 'text--warning' }}">
-          {{ "Yes" if incident.plan.reversible else "No" }}
-        </span>
+        <span class="plan-field__label">Risk Explanation</span>
+        <span class="plan-field__value">{{ incident.plan.risk_explanation or "Not provided" }}</span>
       </div>
       <div class="plan-field plan-field--full">
-        <span class="plan-field__label">Expected effect</span>
-        <span class="plan-field__value">{{ incident.plan.expected_effect or "—" }}</span>
+        <span class="plan-field__label">Expected Effect</span>
+        <span class="plan-field__value">{{ incident.plan.expected_effect or "Not provided" }}</span>
       </div>
     </div>
 
@@ -385,15 +545,16 @@
   <!-- PANEL 5 — HUMAN FINAL REVIEW ★                              -->
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section class="panel panel--review" id="panel-review">
-    <h2 class="panel__title panel__title--review">Human Final Review</h2>
+    <h2 class="panel__title panel__title--review">
+      <span class="panel__title-icon">👤</span>
+      Human Final Review
+    </h2>
 
     <p class="review-rationale">
-      IBM Bob has completed its analysis and proposed a remediation plan.
-      <strong>No cluster changes will be made without explicit human approval.</strong>
-      Review the plan above and record your decision below.
+      IBM Bob analysis is complete. <strong>Authorization is required before remediation can execute.</strong>
+      The dashboard renders system state and records decisions — it does not reason or act autonomously.
     </p>
 
-    <!-- State A: Controls (PENDING_APPROVAL only) -->
     {% if incident.state == 'PENDING_APPROVAL' %}
     <div class="review-controls" id="review-controls">
       <div class="review-controls__summary">
@@ -437,12 +598,11 @@
         </button>
       </div>
       <p class="review-controls__note">
-        Clicking Approve will trigger execution of the proposed action.
-        Clicking Reject will open a dialog requiring your reason before submitting.
+        Approving will trigger execution. Rejecting requires a written reason that is permanently recorded in the audit trail.
       </p>
+      <div class="inline-error" id="review-inline-error" hidden role="alert"></div>
     </div>
 
-    <!-- State B: Recorded decision -->
     {% elif incident.human_decision %}
     <div class="review-decision" id="review-decision">
       {% set dec = incident.human_decision %}
@@ -452,8 +612,14 @@
           <span class="badge badge--resolved badge--large">APPROVED</span>
         </div>
         <div class="decision-record__fields">
-          <div class="decision-record__row"><span class="decision-record__label">Approved by</span><span class="decision-record__value">{{ dec.approver }}</span></div>
-          <div class="decision-record__row"><span class="decision-record__label">At</span><span class="decision-record__value monospace">{{ dec.timestamp }}</span></div>
+          <div class="decision-record__row">
+            <span class="decision-record__label">Approved by</span>
+            <span class="decision-record__value">{{ dec.approver }}</span>
+          </div>
+          <div class="decision-record__row">
+            <span class="decision-record__label">At</span>
+            <span class="decision-record__value monospace">{{ dec.timestamp }}</span>
+          </div>
         </div>
       </div>
       {% else %}
@@ -462,8 +628,14 @@
           <span class="badge badge--feedback-recorded badge--large">REJECTED</span>
         </div>
         <div class="decision-record__fields">
-          <div class="decision-record__row"><span class="decision-record__label">Rejected by</span><span class="decision-record__value">{{ dec.approver }}</span></div>
-          <div class="decision-record__row"><span class="decision-record__label">At</span><span class="decision-record__value monospace">{{ dec.timestamp }}</span></div>
+          <div class="decision-record__row">
+            <span class="decision-record__label">Rejected by</span>
+            <span class="decision-record__value">{{ dec.approver }}</span>
+          </div>
+          <div class="decision-record__row">
+            <span class="decision-record__label">At</span>
+            <span class="decision-record__value monospace">{{ dec.timestamp }}</span>
+          </div>
           <div class="decision-record__row decision-record__row--full">
             <span class="decision-record__label">Rejection reason</span>
             <blockquote class="decision-record__reason">{{ dec.feedback }}</blockquote>
@@ -487,11 +659,14 @@
   {% if incident.verification %}
   <section class="panel {{ 'panel--failure' if incident.verification.outcome != 'PASS' else '' }}" id="panel-verification">
     <h2 class="panel__title {{ 'panel__title--failure' if incident.verification.outcome != 'PASS' else '' }}">
+      <span class="panel__title-icon">{{ '✓' if incident.verification.outcome == 'PASS' else '✕' }}</span>
       Independent Verification
       <span class="badge badge--{{ 'resolved' if incident.verification.outcome == 'PASS' else 'verification-failed' }} badge--small">
         {{ incident.verification.outcome }}
       </span>
     </h2>
+
+    <p class="verification-intro">Two independent signals re-read from the cluster after execution. Both must pass.</p>
 
     <div class="signals-grid">
       {% for sig in incident.verification.signals %}
@@ -520,10 +695,13 @@
   {% endif %}
   {% if timeline_events or incident.audit_log %}
   <section class="panel" id="panel-timeline">
-    <h2 class="panel__title">Timeline</h2>
+    <h2 class="panel__title">
+      <span class="panel__title-icon">◷</span>
+      Timeline
+    </h2>
     <ol class="timeline" role="list">
       {% for e in timeline_events %}
-      <li class="timeline-item">
+      <li class="timeline-item timeline-item--evidence">
         <div class="timeline-item__dot"></div>
         <div class="timeline-item__content">
           <span class="timeline-item__time monospace">{{ e.t }}</span>
@@ -534,7 +712,7 @@
       {% endfor %}
       {% for entry in incident.audit_log %}
       {% if entry.step in ['human_decision', 'rejection_recorded', 'execute', 'execute_result', 'verification'] %}
-      <li class="timeline-item timeline-item--pipeline">
+      <li class="timeline-item timeline-item--pipeline {{ 'timeline-item--rejection' if entry.step == 'rejection_recorded' else '' }}">
         <div class="timeline-item__dot timeline-item__dot--pipeline"></div>
         <div class="timeline-item__content">
           <span class="timeline-item__time monospace">{{ entry.timestamp or entry.started_at or entry.completed_at or "—" }}</span>
@@ -575,6 +753,7 @@
   {% if incident.audit_log %}
   <section class="panel" id="panel-audit">
     <h2 class="panel__title">
+      <span class="panel__title-icon">☰</span>
       Audit Record
       <button class="panel__toggle" onclick="toggleAudit()" id="audit-toggle" aria-expanded="false" aria-controls="audit-body">
         Show ▾
@@ -605,10 +784,10 @@
   </section>
   {% endif %}
 
-</main><!-- /incident-main -->
+</main>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- REJECTION DIALOG — hidden until Reject is clicked              -->
+<!-- REJECTION DIALOG                                                -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="dialog-overlay" id="dialog-overlay" hidden aria-modal="true" role="dialog"
      aria-labelledby="dialog-title" aria-describedby="dialog-desc">
@@ -657,7 +836,7 @@
 </div>
 
 <footer class="site-footer">
-  <span>KubeMedic — IBM TechXchange 2026 Dev Day Hackathon</span>
+  <span>KubeMedic · IBM TechXchange 2026 Dev Day Hackathon · Human-controlled incident response with IBM Bob</span>
 </footer>
 
 <script src="/static/app.js"></script>

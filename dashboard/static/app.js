@@ -253,6 +253,52 @@ async function submitRejection() {
   }
 }
 
+// ── Demo controls (index page only) ──────────────────────────────────────
+
+async function injectIncident() {
+  const btn    = document.getElementById("btn-inject");
+  const status = document.getElementById("demo-status");
+  if (btn) btn.disabled = true;
+  if (status) { status.hidden = false; status.textContent = "Injecting incident…"; status.className = "demo-controls-status"; }
+
+  try {
+    const res = await fetch("/api/demo/inject", { method: "POST" });
+    if (!res.ok) {
+      const detail = await _extractError(res);
+      if (status) { status.textContent = `Failed: ${detail}`; status.className = "demo-controls-status demo-controls-status--err"; }
+    } else {
+      if (status) { status.textContent = "Incident injected — refresh the page in a moment."; status.className = "demo-controls-status demo-controls-status--ok"; }
+      setTimeout(() => window.location.reload(), 1200);
+    }
+  } catch (err) {
+    if (status) { status.textContent = `Network error: ${err.message}`; status.className = "demo-controls-status demo-controls-status--err"; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function resetWorkload() {
+  const btn    = document.getElementById("btn-reset");
+  const status = document.getElementById("demo-status");
+  if (btn) btn.disabled = true;
+  if (status) { status.hidden = false; status.textContent = "Resetting workload…"; status.className = "demo-controls-status"; }
+
+  try {
+    const res = await fetch("/api/demo/reset", { method: "POST" });
+    if (!res.ok) {
+      const detail = await _extractError(res);
+      if (status) { status.textContent = `Failed: ${detail}`; status.className = "demo-controls-status demo-controls-status--err"; }
+    } else {
+      if (status) { status.textContent = "Workload reset — cluster is healthy."; status.className = "demo-controls-status demo-controls-status--ok"; }
+      setTimeout(() => window.location.reload(), 1500);
+    }
+  } catch (err) {
+    if (status) { status.textContent = `Network error: ${err.message}`; status.className = "demo-controls-status demo-controls-status--err"; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ── Audit toggle ──────────────────────────────────────────────────────────
 
 function toggleAudit() {
