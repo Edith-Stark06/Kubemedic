@@ -283,6 +283,7 @@ class Incident(BaseModel):
     state: IncidentState = IncidentState.OPEN
     tickets: list[TicketReference] = Field(default_factory=list)
     evidence: EvidenceSnapshot | None = None
+    correlation: CorrelationResult | None = None   # set by correlate()
     analysis: BobAnalysis | None = None
     plan: RemediationPlan | None = None
     human_decision: HumanDecision | None = None
@@ -320,10 +321,13 @@ class Incident(BaseModel):
 class IncidentRecord(BaseModel):
     incident_id: str
     final_state: IncidentState
-    tickets: list[str]                 # ticket IDs
+    tickets: list[str]                      # ticket IDs
+    correlation: CorrelationResult | None = None
     analysis_source: str
+    bob_analysis: dict[str, Any] | None = None  # full analysis snapshot for audit
+    root_cause: dict[str, Any] | None = None
     recommended_action: str | None
-    human_decision: str | None         # "approved" / "rejected" / None
+    human_decision: str | None              # "approved" / "rejected" / None
     rejection_feedback: str | None = None
     executed: bool = False
     verification_outcome: str | None = None
@@ -333,13 +337,31 @@ class IncidentRecord(BaseModel):
 
     @classmethod
     def from_incident(cls, inc: Incident) -> "IncidentRecord":
+        # Snapshot the full analysis for the audit record
+        bob_analysis_snapshot: dict[str, Any] | None = None
+        root_cause_snapshot: dict[str, Any] | None = None
+        if inc.analysis and not inc.analysis.is_unavailable:
+            bob_analysis_snapshot = inc.analysis.model_dump(mode="json")
+            if inc.analysis.root_cause:
+                root_cause_snapshot = inc.analysis.root_cause.model_dump(mode="json")
+
+        terminal_states = {
+            IncidentState.RESOLVED,
+            IncidentState.REJECTED,
+            IncidentState.FEEDBACK_RECORDED,
+            IncidentState.VERIFICATION_FAILED,
+        }
+
         return cls(
             incident_id=inc.incident_id,
             final_state=inc.state,
             tickets=[t.ticket_id for t in inc.tickets],
+            correlation=inc.correlation,
             analysis_source=(
                 inc.analysis.analysis_source if inc.analysis else "none"
             ),
+            bob_analysis=bob_analysis_snapshot,
+            root_cause=root_cause_snapshot,
             recommended_action=(
                 inc.analysis.recommended_action.value
                 if inc.analysis and inc.analysis.recommended_action
@@ -359,9 +381,7 @@ class IncidentRecord(BaseModel):
             ),
             created_at=inc.created_at,
             resolved_at=(
-                inc.updated_at
-                if inc.state in (IncidentState.RESOLVED, IncidentState.REJECTED)
-                else None
+                inc.updated_at if inc.state in terminal_states else None
             ),
             audit_log=inc.audit_log,
         )
