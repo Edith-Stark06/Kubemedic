@@ -1,9 +1,10 @@
-"""OpsPilot evidence tools — typed, READ-ONLY Kubernetes inspection.
+"""KubeMedic evidence tools — typed, READ-ONLY Kubernetes inspection.
 
-Safety contract (see CLAUDE.md): these tools NEVER mutate cluster state. Each
-function validates inputs and returns a typed pydantic result. Cluster/API
-errors are captured as structured values — never silently swallowed, never
-fabricated. This is the only layer allowed to read the cluster for evidence.
+Safety contract (see AGENTS.md, "The AI boundary"): these tools NEVER mutate
+cluster state. Each function validates inputs and returns a typed pydantic
+result. Cluster and API errors are captured as structured values — never
+silently swallowed, never fabricated. This is the only layer allowed to read
+the cluster for evidence.
 """
 from __future__ import annotations
 
@@ -100,7 +101,7 @@ class HealthResult(BaseModel):
 class EvidenceSnapshot(BaseModel):
     """A single, typed, point-in-time snapshot of all read-only evidence.
 
-    This is the internal currency of the orchestrator pipeline: collected once,
+    This is the internal currency of the evidence pipeline: collected once,
     then passed to correlation → hypothesis → plan, and collected again for
     verification. Everything in it comes from the live cluster.
     """

@@ -3,7 +3,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 # Import existing evidence models
-from orchestrator.evidence import (
+from mcp_server.evidence import (
     WorkloadState,
     PodState,
     EventItem,

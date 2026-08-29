@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from orchestrator.evidence import inspect_workload, inspect_pods, check_application_health
+from mcp_server.evidence import inspect_workload, inspect_pods, check_application_health
 from mcp_server import tickets
 from mcp_server.models import TicketStatus, TicketSeverity
 
