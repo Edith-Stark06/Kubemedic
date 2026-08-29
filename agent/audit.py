@@ -70,11 +70,18 @@ def record_decision(incident: Incident, decision: HumanDecision) -> Incident:
 
     if decision.decision == "rejected":
         incident.transition(IncidentState.REJECTED)
+        # The reason joins the incident's feedback history, which
+        # reasoning.run_analysis() reads back into Bob's prompt on the next
+        # revision. Storing it only in the audit log -- as this did before --
+        # meant the reviewer's knowledge was recorded and never used.
+        if decision.feedback:
+            incident.feedback_history.append(decision.feedback)
         incident.audit_log.append(
             {
                 "step": "rejection_recorded",
                 "reason": decision.feedback,
                 "executed": False,
+                "feedback_count": len(incident.feedback_history),
             }
         )
         incident.transition(IncidentState.FEEDBACK_RECORDED)

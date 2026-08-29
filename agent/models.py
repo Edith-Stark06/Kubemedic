@@ -271,6 +271,12 @@ class IncidentState(str, Enum):
     VERIFICATION_FAILED     = "VERIFICATION_FAILED"
 
 
+# A rejected plan may be revised this many times before the incident is handed
+# to a human outright. Without a ceiling, reject -> revise -> reject is an
+# unbounded loop that burns Bob calls and never terminates.
+MAX_REVISIONS = 3
+
+
 # Transitions that are explicitly illegal (executor raises on these)
 _ILLEGAL_TRANSITIONS: set[tuple[IncidentState, IncidentState]] = {
     (IncidentState.REJECTED, IncidentState.EXECUTING),
@@ -296,6 +302,14 @@ class Incident(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc)
     )
     audit_log: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Every rejection reason this incident has collected, oldest first. Read
+    # back into Bob's prompt on re-analysis so a revised plan knows what the
+    # reviewer objected to. Storing it without feeding it back was the gap.
+    feedback_history: list[str] = Field(default_factory=list)
+    # How many times Bob has been asked to revise. Capped by MAX_REVISIONS so
+    # a reject/revise cycle cannot spin indefinitely.
+    revision_count: int = 0
 
     def transition(self, new_state: IncidentState) -> None:
         """Advance state, refusing illegal transitions."""
@@ -329,6 +343,8 @@ class IncidentRecord(BaseModel):
     recommended_action: str | None
     human_decision: str | None              # "approved" / "rejected" / None
     rejection_feedback: str | None = None
+    feedback_history: list[str] = Field(default_factory=list)
+    revision_count: int = 0
     executed: bool = False
     verification_outcome: str | None = None
     created_at: datetime
@@ -375,6 +391,8 @@ class IncidentRecord(BaseModel):
                 if inc.human_decision and inc.human_decision.decision == "rejected"
                 else None
             ),
+            feedback_history=list(inc.feedback_history),
+            revision_count=inc.revision_count,
             executed=inc.execution is not None and inc.execution.success,
             verification_outcome=(
                 inc.verification.outcome if inc.verification else None
