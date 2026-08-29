@@ -13,7 +13,7 @@ from mcp_server import tickets
 
 logger = logging.getLogger(__name__)
 
-def get_workload_state(namespace: str = 'opspilot', deployment: str = 'ticket-booking') -> dict:
+def get_workload_status(namespace: str = 'opspilot', deployment: str = 'ticket-booking') -> dict:
     try:
         res = inspect_workload(namespace, deployment)
         return res.model_dump()
@@ -41,14 +41,14 @@ def get_recent_changes(namespace: str = 'opspilot', deployment: str = 'ticket-bo
     except Exception as e:
         return {"error": str(e)}
 
-def get_app_health(namespace: str = 'opspilot', service: str = 'ticket-booking') -> dict:
+def get_application_health(namespace: str = 'opspilot', service: str = 'ticket-booking') -> dict:
     try:
         res = check_application_health(namespace, service)
         return res.model_dump()
     except Exception as e:
         return {"error": str(e)}
 
-def get_full_snapshot(namespace: str = 'opspilot', deployment: str = 'ticket-booking', service: str = 'ticket-booking') -> dict:
+def get_workload_snapshot(namespace: str = 'opspilot', deployment: str = 'ticket-booking', service: str = 'ticket-booking') -> dict:
     try:
         res = collect(namespace, deployment, service)
         return res.model_dump()
