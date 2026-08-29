@@ -103,6 +103,7 @@ def correlate(
         ),
         tickets=member,
         evidence=evidence,
+        correlation=correlation,
     )
     incident.audit_log.append(
         {
@@ -112,10 +113,6 @@ def correlate(
             "basis": correlation.correlation_basis,
         }
     )
-    # Store correlation in analysis placeholder so downstream can read it
-    # without requiring a full Bob run first.
-    # (Full BobAnalysis is set later by reasoning.py)
-    incident._correlation_result = correlation  # type: ignore[attr-defined]
 
     return incident, excluded
 
