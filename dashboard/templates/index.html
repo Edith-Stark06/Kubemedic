@@ -9,8 +9,14 @@
 <body>
   <header class="site-header">
     <div class="site-header__inner">
-      <span class="site-header__brand">KubeMedic</span>
-      <span class="site-header__subtitle">Incident Console</span>
+      <div class="site-header__brand-group">
+        <span class="site-header__brand">KubeMedic</span>
+        <span class="site-header__tagline">Kubernetes Incident Response Console</span>
+      </div>
+      <div class="site-header__status" id="connection-status">
+        <span class="status-dot status-dot--ok"></span>
+        <span class="status-dot-label">Mock provider active</span>
+      </div>
     </div>
   </header>
 
@@ -19,27 +25,39 @@
     <div class="alert alert--error" role="alert">{{ error }}</div>
     {% endif %}
 
-    <h1 class="page-title">Active Incidents</h1>
+    <div class="page-header">
+      <h1 class="page-title">Active Incidents</h1>
+      <p class="page-desc">IBM Bob-assisted incident analysis. All remediation requires explicit human authorization.</p>
+    </div>
 
     {% if not incidents %}
     <div class="empty-state">
+      <div class="empty-state__icon">✓</div>
       <p class="empty-state__text">No active incidents.</p>
-      <p class="empty-state__sub">The cluster is healthy or no incidents have been detected yet.</p>
+      <p class="empty-state__sub">The cluster appears healthy. No incidents have been detected or are awaiting review.</p>
     </div>
     {% else %}
     <ul class="incident-list" role="list">
       {% for inc in incidents %}
-      <li class="incident-card">
+      <li class="incident-card incident-card--state-{{ inc.state | lower | replace('_', '-') }}">
         <a class="incident-card__link" href="/incident/{{ inc.incident_id }}">
           <div class="incident-card__header">
             <span class="incident-card__id">{{ inc.incident_id }}</span>
             <span class="badge badge--{{ inc.state | lower | replace('_', '-') }}">
               {{ inc.state | state_label }}
             </span>
+            {% if inc.state == 'PENDING_APPROVAL' %}
+            <span class="incident-card__action-needed">Action Required</span>
+            {% endif %}
           </div>
           <div class="incident-card__meta">
-            <span class="incident-card__workload">{{ inc.workload }}</span>
+            <span class="incident-card__workload">
+              <span class="incident-card__workload-icon">⬡</span>
+              {{ inc.workload }}
+            </span>
+            <span class="incident-card__divider">·</span>
             <span class="incident-card__count">{{ inc.ticket_count }} ticket{% if inc.ticket_count != 1 %}s{% endif %}</span>
+            <span class="incident-card__divider">·</span>
             <span class="incident-card__age">{{ inc.updated_at | rel_time }}</span>
           </div>
         </a>
@@ -47,10 +65,29 @@
       {% endfor %}
     </ul>
     {% endif %}
+
+    <!-- DEMO CONTROLS — clearly separated from incident management -->
+    <div class="demo-controls-section">
+      <div class="demo-controls-header">
+        <span class="demo-controls-header__label">Demo Controls</span>
+        <span class="demo-controls-header__note">Workload simulation only — does not bypass human approval</span>
+      </div>
+      <div class="demo-controls-buttons">
+        <button class="btn btn--demo" onclick="injectIncident()" id="btn-inject">
+          Inject Incident
+        </button>
+        <button class="btn btn--demo-reset" onclick="resetWorkload()" id="btn-reset">
+          Reset Workload
+        </button>
+      </div>
+      <div class="demo-controls-status" id="demo-status" hidden></div>
+    </div>
   </main>
 
   <footer class="site-footer">
-    <span>KubeMedic — IBM TechXchange 2026 Dev Day Hackathon</span>
+    <span>KubeMedic · IBM TechXchange 2026 Dev Day Hackathon · Human-controlled incident response with IBM Bob</span>
   </footer>
+
+  <script src="/static/app.js"></script>
 </body>
 </html>

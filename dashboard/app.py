@@ -245,6 +245,49 @@ async def api_reject(body: RejectBody) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# Demo endpoints — inject failure / reset workload
+# ---------------------------------------------------------------------------
+
+@app.post("/api/demo/inject")
+async def api_demo_inject() -> JSONResponse:
+    """
+    Signal the workload to enter a failing state so the incident pipeline
+    can detect it.  Forwards to the workload's /fail endpoint if
+    KUBEMEDIC_WORKLOAD_BASE_URL is set; otherwise returns a mock OK so
+    the UI does not show an error during offline demos.
+    """
+    import httpx
+    workload_url = os.getenv("KUBEMEDIC_WORKLOAD_BASE_URL", "")
+    if workload_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as hc:
+                r = await hc.post(f"{workload_url.rstrip('/')}/fail")
+                r.raise_for_status()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Workload unreachable: {exc}")
+    return JSONResponse({"status": "injected"})
+
+
+@app.post("/api/demo/reset")
+async def api_demo_reset() -> JSONResponse:
+    """
+    Signal the workload to return to a healthy state (clears the injected
+    failure).  Forwards to the workload's /heal endpoint if
+    KUBEMEDIC_WORKLOAD_BASE_URL is set; otherwise returns a mock OK.
+    """
+    import httpx
+    workload_url = os.getenv("KUBEMEDIC_WORKLOAD_BASE_URL", "")
+    if workload_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as hc:
+                r = await hc.post(f"{workload_url.rstrip('/')}/heal")
+                r.raise_for_status()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Workload unreachable: {exc}")
+    return JSONResponse({"status": "reset"})
+
+
+# ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
 
