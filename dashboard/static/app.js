@@ -10,9 +10,8 @@
  *
  * Field name contract:
  *  The rejection POST body uses field name "feedback" — matching
- *  HumanDecision.feedback in agent/models.py. The server returns 422
- *  on empty or whitespace-only feedback. This file must never send
- *  "rejection_feedback" or "reason" as the field name.
+ *  HumanDecision.feedback in agent/models.py (not "reason", not a different name).
+ *  The server returns 422 on empty or whitespace-only feedback.
  *
  * Safety rules:
  *  - Both Approve and Reject buttons are disabled immediately on click
@@ -223,7 +222,7 @@ async function submitRejection() {
       body: JSON.stringify({
         incident_id: _state.incidentId,
         approver: _state.reviewer,
-        feedback: feedback,        // ← field name is "feedback", not "rejection_feedback"
+        feedback: feedback,        // matches HumanDecision.feedback in agent/models.py
       }),
     });
 
