@@ -1,0 +1,22 @@
+# KubeMedic runtime dependencies.
+#
+# Lower bounds, not pins: these are the versions the project was built and
+# verified against on 2026-08-30, and nothing here relies on a newer API.
+# Pin exactly (== instead of >=) if a judge or CI needs a byte-identical
+# environment.
+
+# Kubernetes evidence and remediation. mcp_server/evidence.py reads through
+# this; agent/k8s_client.py is the only module that writes through it.
+kubernetes>=32,<37
+
+# Every contract in agent/models.py. v2 is required -- model_validator and
+# model_dump(mode="json") are used throughout.
+pydantic>=2.7,<3
+
+# The MCP evidence server. types.Tool and the stdio transport come from here.
+mcp>=1.20,<2
+
+# agent/api.py and dashboard/app.py.
+fastapi>=0.110,<1
+uvicorn[standard]>=0.27,<1
+jinja2>=3.1,<4

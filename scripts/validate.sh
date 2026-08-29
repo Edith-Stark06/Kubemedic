@@ -1,59 +1,36 @@
 #!/usr/bin/env bash
-# OpsPilot end-to-end validation harness (07_VALIDATION / 08_DEMO).
+# KubeMedic end-to-end validation against a live cluster.
 #
-# Proves the full loop from a CLEAN baseline, TWICE, with hard assertions:
-#   reset -> assert healthy -> inject incident -> detect (assert gated rollback)
-#         -> refuse (assert BLOCKED + cluster UNCHANGED)
-#         -> approve (assert RESOLVED + dual-signal verification PASS)
-# then a final reset so the cluster is left clean.
+# Proves the whole loop with hard assertions:
+#   healthy -> inject -> observe -> correlate -> propose
+#           -> reject (reason required) -> revise
+#           -> approve -> execute -> verify -> resolve -> reset
 #
-# Fixtures (inject/reset) are the sanctioned incident tooling — they are NOT the
-# agent. All agent decisions/assertions run through validate_incident.py against
-# the live cluster. Exit code 0 iff every run passes.
+# Exit code 0 only if every check passes. The assertions live in
+# scripts/validate_incident.py; this wrapper only locates the interpreter and
+# the repository.
 #
-# Run from anywhere:  bash opspilot/scripts/validate.sh
+# Run from anywhere:  bash scripts/validate.sh
 set -uo pipefail
+
+# Rancher Desktop puts kubectl here. Harmless if the directory is absent.
 export PATH="$PATH:$HOME/.rd/bin"
 export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
 
-PY="/c/Users/shivraj/Desktop/Devops/opspilot/orchestrator/.venv/Scripts/python.exe"
-ORCH="C:/Users/shivraj/Desktop/Devops/opspilot/orchestrator"
-HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO"
+export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
 
-RUNS="${1:-2}"          # number of clean runs (default 2)
-overall=0
+KUBEMEDIC_BASH="$(command -v bash)"
+export KUBEMEDIC_BASH
 
-for run in $(seq 1 "$RUNS"); do
-  echo ""
-  echo "==================== CLEAN RUN $run / $RUNS ===================="
-
-  echo "[fixture] reset to healthy baseline"
-  if ! bash "$HERE/reset_healthy.sh" >/dev/null 2>&1; then
-    echo "  reset FAILED (rollout did not become healthy)"; overall=1; continue
-  fi
-
-  echo "[assert]  precondition: clean baseline"
-  if ! "$PY" "$ORCH/check_healthy.py"; then
-    echo "  precondition FAILED — not starting from a clean state"; overall=1; continue
-  fi
-
-  echo "[fixture] inject incident (bad image)"
-  bash "$HERE/inject_incident.sh" >/dev/null 2>&1
-
-  echo "[assert]  OpsPilot loop (detect -> gate -> approve -> verify)"
-  "$PY" "$ORCH/validate_incident.py"
-  rc=$?
-  if [ "$rc" -ne 0 ]; then echo ">> RUN $run FAILED (rc=$rc)"; overall=1; else echo ">> RUN $run PASSED"; fi
-done
-
-echo ""
-echo "[fixture] final reset to healthy baseline"
-bash "$HERE/reset_healthy.sh" >/dev/null 2>&1 || echo "  (warning) final reset did not confirm healthy"
-
-echo "================================================================"
-if [ "$overall" -eq 0 ]; then
-  echo "VALIDATION: ALL $RUNS RUN(S) PASSED"
-else
-  echo "VALIDATION: FAILURES DETECTED"
+PY="${PYTHON:-python}"
+if ! command -v "$PY" >/dev/null 2>&1; then
+  PY=python3
 fi
-exit "$overall"
+
+echo "repository: $REPO"
+echo "python:     $($PY --version 2>&1)"
+
+exec "$PY" scripts/validate_incident.py "$@"
