@@ -1,7 +1,27 @@
 # 13 — Test Matrix
 
-**Command executed:** `python -m pytest -q`
-**Result:** `62 passed in 0.28s` — 2026-08-29, branch `shivraj/mcp-repo-ci` @ `1448908`
+**Command executed:** `python -m pytest`
+**Result:** `206 passed` — 2026-08-30, branch `shivraj/mcp-repo-ci` @ `9ba495e`
+
+**Command executed:** `bash scripts/validate.sh` (live k3s cluster)
+**Result:** `ALL CHECKS PASSED` — 2026-08-30
+
+| Suite | Tests | Covers |
+|---|---|---|
+| `test_agent_contracts.py` + `test_lifecycle.py` | 62 | The original agent suite |
+| `test_tickets.py` | 12 | Ticket store, incl. the `NameError` regression |
+| `test_mcp_contract.py` | 18 | Tool names, evidence profile is read-only |
+| `test_k8s_client.py` | 29 | Rollback/restart/scale guards, reader shape |
+| `test_adapters.py` | 25 | Type join, and the correlation hazard |
+| `test_review_loop.py` | 19 | Reject → revise → review, and its safety |
+| `test_watcher.py` | 13 | One ticket per signal, dedup, no invented health |
+| `test_api.py` | 28 | Every route, and that none routes around a guard |
+
+Resolved since the audit: **M-01** (`NameError`) now PASS; **M-04, M-05**
+(profile) now PASS; **M-06** (tool names) now PASS; **E-02** (`validate.sh`)
+now PASS; **E-01** (full loop) now PASS with the Bob stage substituted and
+labelled. **B-01** (live Bob analysis) remains **UNVERIFIED** — still never
+observed. **D-01..D-05** (dashboard) remain FAIL: untouched, Verona's lane.
 
 Legend: `PASS` = executed and passed · `FAIL` = executed and failed ·
 `MISSING` = no test exists · `UNVERIFIED` = code exists, not executed here.

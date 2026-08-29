@@ -3,6 +3,26 @@
 Each commit is logically coherent, buildable, testable and reversible. Stage
 named files — never `git add .`.
 
+## Delivered 2026-08-30
+
+| SHA | Commit | Tasks |
+|---|---|---|
+| `841d30a` | docs: repository audit, architecture and integration plan | the audit |
+| `de4b32d` | fix(tickets): import Enum so scalar field updates stop raising | MCP-005 |
+| `c570da9` | refactor(mcp): move the evidence layer into mcp_server, retire orchestrator/ | MCP-003 |
+| `d4796a5` | feat(mcp): align tool names and enforce the read-only evidence profile | MCP-001/002/006/007 |
+| `f9c564b` | feat(agent): live Kubernetes client, evidence adapters | EXEC-001, VER-001, MCP-008 |
+| `358eecd` | feat(agent): human rejection feedback becomes reasoning context | REVIEW-002 |
+| `b53d7ab` | feat(api): HTTP surface over the incident lifecycle | API-001, REVIEW-001 |
+| `592d487` | feat(watcher): one ticket per anomaly signal, deduplicated per kind | TICKET-001 |
+| `9ba495e` | chore: dependencies, CI, README and a working end-to-end harness | REPO-002/003/004, CI-001, E2E-001, MCP-004 |
+
+The planned commit 01 (untrack the database) landed as part of the sequence,
+and commits 16-18 (dashboard) are untouched -- Verona's lane. Commits 22-23
+(submission statements, freeze) remain.
+
+---
+
 ## Sequence
 
 | # | Commit | Task | Files | Test before committing |

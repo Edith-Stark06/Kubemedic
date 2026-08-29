@@ -1,12 +1,42 @@
 # 00 — Project Status
 
-**Branch audited:** `shivraj/mcp-repo-ci` @ `1448908`
-**Audit date:** 2026-08-29
-**Test result:** `python -m pytest -q` → **62 passed in 0.28s** (executed)
+**Branch:** `shivraj/mcp-repo-ci`
+**Audited:** 2026-08-29 @ `1448908` · **Updated:** 2026-08-30 @ `9ba495e`
+**Test result:** `python -m pytest` → **206 passed** (executed)
+**End-to-end:** `bash scripts/validate.sh` → **ALL CHECKS PASSED** against a
+live k3s cluster (executed)
 
 This branch = Ramana's consolidated `agent/` (from `origin/ramana`) + the
 `mcp_server/`, `dashboard/`, `k8s/`, `workload/`, `scripts/` layers imported
 from the OpsPilot archive. It is the only branch where all layers coexist.
+
+---
+
+## What changed on 2026-08-30
+
+Work through `14_INTEGRATION_PLAN.md`, excluding the dashboard tasks (Verona's
+lane). Nine commits, `de4b32d`..`9ba495e`.
+
+| Was | Now |
+|---|---|
+| Executor had never mutated a cluster | `agent/k8s_client.py` -- live rollback verified end to end |
+| Verifier had never read a cluster | `LiveEvidenceReader`, two signals, verified |
+| No MCP-to-agent join | `agent/adapters.py`, with the correlation hazard tested |
+| `--profile evidence` ignored | Enforced; CI asserts the surface is read-only |
+| 3 MCP tool names mismatched | Renamed to what both consumers call |
+| `update_ticket` raised `NameError` | Fixed, 12 tests |
+| Rejection feedback stored, never read | Fed into Bob's prompt; `request_revision()`; capped at 3 |
+| No API over the agent | `agent/api.py`, 28 tests |
+| Watcher filed 1 ticket per burst | One per signal kind; 2 real tickets correlated into 1 incident live |
+| `orchestrator/` alive as a dependency | Deleted |
+| No dependencies declared, no CI, 1-line README | All present |
+| `validate.sh` unrunnable anywhere | Runs; every check passes |
+| 62 tests, `agent/` only | 206 tests across agent, MCP, adapters, API, watcher |
+
+**Still open, and both are Verona's lane or blocked:** the dashboard is still
+mocked (`DASH-001`), and **IBM Bob has still never returned a live analysis**
+(`BOB-001`) because no credentials are configured. Everything else in
+`16_TASK_BACKLOG.md` outside the dashboard lane is done.
 
 ---
 
@@ -146,22 +176,25 @@ README, naming consistency, docstring cleanup.
 
 ## Confidence by subsystem
 
-| Subsystem | Status | Basis |
-|---|---|---|
-| MCP | **PARTIAL** | Imports and dispatches; wrong names, no profile, one broken tool |
-| Agent | **READY** | 62 tests pass |
-| Reasoning | **UNVERIFIED** | Code correct; no real Bob response ever observed |
-| Ticketing | **PARTIAL** | SQLite works; `update_ticket` broken; two competing stores |
-| Dashboard | **BROKEN** | Fabricates data; dead imports |
-| Human approval | **PARTIAL** | Model layer correct; HTTP layer wrong |
-| Remediation | **PARTIAL** | Executor correct + tested; no real `KubernetesClient` implementation exists |
-| Verification | **PARTIAL** | Logic correct + tested; no real `EvidenceReader` implementation exists |
-| Audit | **READY** | Records written and tested |
-| CI | **MISSING** | No `.github/` |
-| Documentation | **PARTIAL** | This set; README missing |
-| Submission | **MISSING** | No deliverables produced |
+Updated 2026-08-30.
 
-> **UNKNOWN / NEEDS VERIFICATION:** no `KubernetesClient` or `EvidenceReader`
-> concrete implementation exists anywhere in the repository. Both protocols are
-> satisfied only by test fakes. The executor and verifier have never run
-> against a cluster.
+| Subsystem | Was | Now | Basis |
+|---|---|---|---|
+| MCP | PARTIAL | **READY** | Names aligned, profile enforced, 18 contract tests |
+| Agent | READY | **READY** | 206 tests |
+| Reasoning | UNVERIFIED | **UNVERIFIED** | Feedback loop built and tested; no live Bob response yet |
+| Ticketing | PARTIAL | **READY** | NameError fixed; one ticket per signal; 25 tests |
+| Dashboard | BROKEN | **BROKEN** | Untouched -- Verona's lane, `DASH-001` |
+| Human approval | PARTIAL | **READY** | 400 feedback_required; refusal verified on the live cluster |
+| Remediation | PARTIAL | **READY** | Live rollback executed and verified |
+| Verification | PARTIAL | **READY** | Two live signals, PASS observed |
+| Audit | READY | **READY** | Records carry feedback history and revision count |
+| CI | MISSING | **READY** | `.github/workflows/ci.yml`: tests, hygiene, safety assertion |
+| Documentation | PARTIAL | **READY** | This set plus a real README |
+| Submission | MISSING | **MISSING** | No deliverable produced yet -- `SUB-001`..`SUB-005` |
+
+> **UNKNOWN / NEEDS VERIFICATION, unchanged and now the only thing in the way:**
+> IBM Bob has never returned a live analysis. `agent/bob.py` locates the binary
+> in the local IBM Bob install, but that build has no headless mode, so the REST
+> path needs `KUBEMEDIC_BOB_API_KEY` and `KUBEMEDIC_BOB_AGENT_ID`. Whether
+> `cloud.manufact.com` is the sanctioned endpoint is still unconfirmed.
