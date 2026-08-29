@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticket-booking
+  namespace: opspilot
+  labels:
+    app: ticket-booking
+    app.kubernetes.io/part-of: opspilot
+spec:
+  type: ClusterIP
+  selector:
+    app: ticket-booking
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

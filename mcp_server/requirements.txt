@@ -1,0 +1,4 @@
+kubernetes>=29
+pydantic>=2
+mcp>=1.0
+uvicorn[standard]>=0.27

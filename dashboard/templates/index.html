@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KubeMedic Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Light / white theme */
+      --bg: #f5f7fa; --panel: #ffffff; --panel-hover: #f0f3f8;
+      --border: #e2e7ef; --border-light: #c9d2df;
+      --fg: #111827; --muted: #6b7280;
+      --accent: #2563eb; --accent-hover: #1d4ed8;
+      --ok: #16a34a; --ok-muted: rgba(22,163,74,0.08);
+      --bad: #dc2626; --bad-muted: rgba(220,38,38,0.08);
+      --warn: #d97706; --warn-muted: rgba(217,119,6,0.08);
+      --critical-color: #dc2626; --critical-muted: rgba(220,38,38,0.1);
+      --high-color: #ea580c;  --high-muted: rgba(234,88,12,0.1);
+      --medium-color: #d97706; --medium-muted: rgba(217,119,6,0.1);
+      --low-color: #16a34a;   --low-muted: rgba(22,163,74,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--fg); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.6; display: flex; height: 100vh; overflow: hidden; }
+
+    .sidebar { width: 220px; min-width: 220px; background: var(--panel); border-right: 1px solid var(--border); padding: 24px 12px; display: flex; flex-direction: column; overflow-y: auto; box-shadow: 1px 0 0 var(--border); }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .header { padding: 16px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--panel); flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .container { padding: 32px; max-width: 1200px; margin: 0 auto; width: 100%; overflow-y: auto; flex: 1; }
+
+    h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
+    h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 12px; }
+    .text-muted { color: var(--muted); }
+    .text-sm { font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; }
+    pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+
+    .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; padding: 0 8px; }
+    .logo span { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500; text-decoration: none; margin-bottom: 4px; transition: all 0.15s; }
+    .nav-item:hover { background: var(--bg); color: var(--fg); }
+    .nav-item.active { background: rgba(37,99,235,0.08); color: var(--accent); border-left: 3px solid var(--accent); border-radius: 4px 8px 8px 4px; font-weight: 600; }
+
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: border-color 0.2s, box-shadow 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card:hover { border-color: var(--border-light); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+
+    .kv-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .kv-box .k { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+    .kv-box .v { font-size: 14px; font-weight: 500; word-break: break-all; }
+
+    /* Severity chips — critical gets its own colour not shared with .bad */
+    .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+    .chip.ok       { color: var(--ok);           background: var(--ok-muted);      border-color: rgba(63,185,80,0.4); }
+    .chip.bad      { color: var(--bad);           background: var(--bad-muted);     border-color: rgba(248,81,73,0.4); }
+    .chip.warn     { color: var(--warn);          background: var(--warn-muted);    border-color: rgba(210,153,34,0.4); }
+    .chip.info     { color: var(--accent);        background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.4); }
+    .chip.high     { color: var(--high-color);    background: var(--high-muted);    border-color: rgba(227,128,74,0.4); }
+    .chip.medium   { color: var(--medium-color);  background: var(--medium-muted);  border-color: rgba(210,153,34,0.4); }
+    .chip.low      { color: var(--low-color);     background: var(--low-muted);     border-color: rgba(63,185,80,0.4); }
+    .chip.critical { color: var(--critical-color);background: var(--critical-muted);border-color: rgba(248,81,73,0.5); }
+
+    .banner { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 8px; border: 1px solid; margin-bottom: 16px; }
+    .banner.ok  { background: rgba(22,163,74,0.07);  border-color: rgba(22,163,74,0.35);  color: #15803d; }
+    .banner.bad { background: rgba(220,38,38,0.07);  border-color: rgba(220,38,38,0.35);  color: #b91c1c; }
+
+    button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit; transition: all 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    button:hover:not(:disabled) { border-color: var(--border-light); background: var(--panel-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 2px 8px rgba(37,99,235,0.25); }
+    button.approve { background: var(--ok); color: #fff; border-color: var(--ok); font-weight: 600; }
+    button.approve:hover:not(:disabled) { background: #15803d; border-color: #15803d; box-shadow: 0 2px 8px rgba(22,163,74,0.25); }
+    button.reject  { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+    button.reject:hover:not(:disabled)  { background: rgba(220,38,38,0.06); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; }
+    td { padding: 12px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+    .status-dot.ok  { background: var(--ok);  box-shadow: 0 0 6px rgba(22,163,74,0.5); }
+    .status-dot.bad { background: var(--bad); box-shadow: 0 0 6px rgba(220,38,38,0.5); }
+
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Human Approval Gate */
+    .gate { background: rgba(220,38,38,0.04); border: 1px solid rgba(220,38,38,0.2); border-radius: 12px; padding: 20px; margin-top: 16px; }
+    .gate::before { content: ''; display: block; }
+
+    .view-section { display: none; animation: fadeIn 0.3s ease; }
+    .view-section.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Master Incident card */
+    .master-incident-card { background: var(--panel); border: 1px solid rgba(220,38,38,0.25); border-radius: 12px; padding: 0; margin-bottom: 20px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .master-incident-header { background: rgba(220,38,38,0.05); border-bottom: 1px solid rgba(220,38,38,0.15); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .master-incident-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; font-weight: 700; color: var(--bad); }
+    .sub-tickets-list { padding: 16px 20px; }
+    .sub-ticket-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .sub-ticket-row:last-child { margin-bottom: 0; }
+    .sub-ticket-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: var(--muted); min-width: 60px; }
+    .sub-ticket-title { flex: 1; font-size: 13px; }
+    .correlation-box { margin: 0 20px 16px 20px; background: rgba(37,99,235,0.04); border: 1px solid rgba(37,99,235,0.15); border-radius: 8px; padding: 14px 16px; }
+    .correlation-box h4 { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--accent); letter-spacing: 0.5px; margin-bottom: 8px; }
+    .correlation-box pre { font-size: 12px; color: #374151; line-height: 1.65; }
+
+    /* Flex utilities */
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 16px; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-4 { margin-bottom: 16px; }
+    .p-4 { padding: 16px; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="logo"><span>🛰️ KubeMedic</span></div>
+    <a class="nav-item active" onclick="nav('dashboard')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      Dashboard
+    </a>
+    <a class="nav-item" onclick="nav('tickets')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg>
+      Tickets
+    </a>
+    <a class="nav-item" onclick="nav('history')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      History
+    </a>
+    <a class="nav-item" onclick="nav('architecture')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+      Architecture
+    </a>
+  </div>
+
+  <div class="main-content">
+    <div class="header">
+      <div>
+        <h1 id="page-title">Dashboard</h1>
+        <div class="text-muted text-sm mt-2">Two-Tier Kubernetes Incident Response · Many-to-One Correlation</div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 text-sm"><span class="status-dot ok"></span> Cluster Healthy</div>
+        <div class="flex items-center gap-2 text-sm"><span id="watcher-dot" class="status-dot bad"></span> Watcher <span id="watcher-text">Stopped</span></div>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <!-- ═══════════════════════ DASHBOARD VIEW ═══════════════════════ -->
+      <div id="view-dashboard" class="view-section active">
+        <div class="flex justify-between items-center mb-4">
+          <h2>Cluster Overview</h2>
+          <button class="primary flex items-center gap-2" onclick="detect()" id="detect-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            Detect &amp; Assess
+          </button>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Cluster Status</h3>
+            <div id="cluster-status-content" class="text-muted text-sm">Loading...</div>
+          </div>
+          <div class="card">
+            <div class="flex justify-between items-center mb-4">
+              <h3 style="margin:0">MCP Watcher</h3>
+              <div>
+                <button onclick="toggleWatcher('start')" class="primary text-sm" style="padding:4px 8px">Start</button>
+                <button onclick="toggleWatcher('stop')" class="text-sm" style="padding:4px 8px">Stop</button>
+              </div>
+            </div>
+            <div id="watcher-details" class="text-sm text-muted">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Active Tickets / Master Incidents -->
+        <h2 class="mt-4">
+          Active Incidents &amp; Tickets
+          <span id="active-tickets-count" class="chip info" style="margin-left:8px">0</span>
+        </h2>
+        <div id="active-incidents-container">
+          <!-- Populated by loadTickets() — renders master incident cards + orphan ticket rows -->
+          <div class="card" style="padding:0">
+            <table id="tickets-table">
+              <thead><tr><th>ID</th><th>Title / Service</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody><tr><td colspan="5" style="text-align:center" class="text-muted">No active tickets</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ MASTER INCIDENT DETAIL VIEW ═══════════════ -->
+      <div id="view-master-incident" class="view-section">
+        <button onclick="nav('dashboard')" class="mb-4 text-sm" style="background:transparent;border:none;padding:0;color:var(--muted)">← Back to Dashboard</button>
+        <div id="master-incident-detail-content"></div>
+      </div>
+
+      <!-- ════════════════════ SINGLE TICKET DETAIL VIEW ════════════════ -->
+      <div id="view-ticket-detail" class="view-section">
+        <button onclick="nav('dashboard')" class="mb-4 text-sm" style="background:transparent;border:none;padding:0;color:var(--muted)">← Back to Dashboard</button>
+        <div id="ticket-detail-content"></div>
+      </div>
+
+      <!-- ═══════════════════════ ALL TICKETS VIEW ═════════════════════ -->
+      <div id="view-tickets" class="view-section">
+        <h2>All Tickets &amp; Incidents</h2>
+        <div id="all-tickets-container">
+          <div class="card" style="padding:0">
+            <table id="all-tickets-table">
+              <thead><tr><th>ID</th><th>Title / Service</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════ HISTORY VIEW ════════════════════════ -->
+      <div id="view-history" class="view-section">
+        <h2>Incident History</h2>
+        <div class="card" style="padding:0">
+          <table id="history-table">
+            <thead><tr><th>Record ID</th><th>Date</th><th>Outcome</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══════════════════════ ARCHITECTURE VIEW ══════════════════════ -->
+      <div id="view-architecture" class="view-section">
+        <h2>Architecture: Two-Tier Incident Response</h2>
+        <div class="card">
+          <p class="text-muted mb-4">KubeMedic uses a deterministic rule-based Tier 1 combined with an LLM-powered Tier 2 for safe, impact-aware Kubernetes operations with Many-to-One ticket correlation.</p>
+          <div class="grid-2 mt-4">
+            <div class="kv-box" style="border-left: 3px solid var(--accent)">
+              <div style="font-weight:600; margin-bottom:8px">Tier 1: MCP Server (Cheap Watcher)</div>
+              <ul class="text-sm text-muted" style="padding-left:16px; margin:0">
+                <li>Rule-based evidence collection (24/7, no AI cost)</li>
+                <li>Provides read-only K8s tools to the agent</li>
+                <li>Creates ticket storm when anomaly detected</li>
+                <li>NEVER reasons, diagnoses, or makes decisions</li>
+              </ul>
+            </div>
+            <div class="kv-box" style="border-left: 3px solid var(--ok)">
+              <div style="font-weight:600; margin-bottom:8px">Tier 2: IBM Bob Agent (AI Brain)</div>
+              <ul class="text-sm text-muted" style="padding-left:16px; margin:0">
+                <li>Correlates multiple tickets → 1 Master Incident</li>
+                <li>Gemini LLM for hypothesis generation</li>
+                <li>Impact-aware remediation plan (blast radius, reversibility)</li>
+                <li>Wakes up ON-DEMAND only (prevents token drain)</li>
+              </ul>
+            </div>
+          </div>
+          <h3 class="mt-4 pt-4" style="border-top:1px solid var(--border)">Key Principles (C3 + C4 Framework)</h3>
+          <ul class="text-sm text-muted" style="padding-left:16px">
+            <li><strong>Many-to-One Correlation:</strong> Bob groups cascading alerts into a single Master Incident with one root-cause fix.</li>
+            <li><strong>Impact-Awareness (C3):</strong> Every plan includes risk level, reversibility, blast radius, and user-facing risk.</li>
+            <li><strong>Approval Gate:</strong> Mutating actions require explicit human approval. One approval resolves ALL correlated tickets.</li>
+            <li><strong>Dual-Signal Verification (C4):</strong> Success confirmed by K8s rollout readiness AND application /health HTTP 200.</li>
+          </ul>
+        </div>
+      </div>
+
+    </div><!-- /.container -->
+  </div><!-- /.main-content -->
+
+<script>
+  // ── Routing & Navigation ─────────────────────────────────────────────────
+  function nav(page) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+    const viewEl = document.getElementById(`view-${page}`);
+    if (viewEl) viewEl.classList.add('active');
+
+    const titles = {
+      'dashboard': 'Dashboard',
+      'tickets': 'Tickets',
+      'history': 'Incident Records',
+      'architecture': 'Architecture',
+      'ticket-detail': 'Ticket Details',
+      'master-incident': 'Master Incident',
+    };
+    document.getElementById('page-title').textContent = titles[page] || 'Details';
+
+    // Highlight matching nav link
+    document.querySelectorAll('.nav-item').forEach(link => {
+      if (link.textContent.toLowerCase().includes(page.replace('-', ''))) {
+        link.classList.add('active');
+      }
+    });
+
+    if (page === 'dashboard') loadDashboardData();
+    if (page === 'history')   loadHistory();
+    if (page === 'tickets')   loadTickets(true);
+  }
+
+  // ── HTML escape helper ───────────────────────────────────────────────────
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+
+  // ── Severity → CSS class mapping ─────────────────────────────────────────
+  function sevClass(sev) {
+    const m = { critical: 'critical', high: 'high', medium: 'medium', low: 'low' };
+    return m[(sev || '').toLowerCase()] || 'warn';
+  }
+
+  // ── Status → CSS class mapping ───────────────────────────────────────────
+  function statusClass(s) {
+    if (s === 'resolved')    return 'ok';
+    if (s === 'rejected')    return 'bad';
+    if (s === 'open')        return 'warn';
+    if (s === 'investigating') return 'info';
+    return 'warn';
+  }
+
+  // ── Data Loaders ──────────────────────────────────────────────────────────
+  async function loadDashboardData() {
+    try {
+      // Cluster Status card
+      const stRes = await fetch('/api/status');
+      const st = await stRes.json();
+      const w = st.workload;
+      document.getElementById('cluster-status-content').innerHTML = `
+        <div class="grid-2">
+          <div class="kv-box"><div class="k">Workload</div><div class="v mono">${esc(w.name)}</div></div>
+          <div class="kv-box"><div class="k">Ready</div><div class="v">${w.ready_replicas}/${w.desired_replicas}
+            ${w.rollout_complete
+              ? '<span class="chip ok" style="margin-left:6px">Complete</span>'
+              : '<span class="chip warn" style="margin-left:6px">Rolling</span>'}
+          </div></div>
+          <div class="kv-box" style="grid-column: span 2">
+            <div class="k">Image</div>
+            <div class="v mono text-sm" style="word-break:break-all">${esc(w.image)}</div>
+          </div>
+        </div>`;
+
+      // Watcher Status card
+      const wRes = await fetch('/api/watcher/status');
+      const wt = await wRes.json();
+      document.getElementById('watcher-dot').className = wt.running ? 'status-dot ok' : 'status-dot bad';
+      document.getElementById('watcher-text').textContent = wt.running ? 'Running' : 'Stopped';
+      document.getElementById('watcher-details').innerHTML = `
+        <div class="flex items-center gap-2 mb-2">Status:
+          ${wt.running
+            ? '<span class="chip ok">Active</span>'
+            : '<span class="chip bad">Inactive</span>'}
+        </div>
+        <div>Last Check: ${wt.last_check ? new Date(wt.last_check).toLocaleTimeString() : 'Never'}</div>`;
+
+      loadTickets(false);
+    } catch(e) { console.error('Failed to load dashboard', e); }
+  }
+
+  /**
+   * loadTickets(forAllTab)
+   * Renders Master Incident cards (with sub-tickets) and orphan ticket rows.
+   * forAllTab=true populates the All-Tickets tab instead of the dashboard table.
+   */
+  async function loadTickets(forAllTab) {
+    try {
+      const res = await fetch('/api/tickets');
+      const items = await res.json();
+
+      // Count raw items for the badge (each master incident counts as 1)
+      document.getElementById('active-tickets-count').textContent = items.length;
+
+      // Separate master incidents from orphan tickets
+      const masterIncidents = items.filter(i => i.type === 'master_incident');
+      const orphanTickets   = items.filter(i => i.type === 'ticket');
+
+      // ── Dashboard / All-Tickets tab rendering ──
+      const container = forAllTab
+        ? document.getElementById('all-tickets-container')
+        : document.getElementById('active-incidents-container');
+
+      if (!container) return;
+
+      // Nothing at all
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="padding:0">
+            <table><thead><tr><th>ID</th><th>Title / Service</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody><tr><td colspan="5" style="text-align:center" class="text-muted">No active tickets</td></tr></tbody>
+            </table>
+          </div>`;
+        return;
+      }
+
+      let html = '';
+
+      // Render each Master Incident as a rich card
+      masterIncidents.forEach(mi => {
+        html += renderMasterIncidentCard(mi);
+      });
+
+      // Orphan tickets in a plain table (single-ticket flow still works)
+      if (orphanTickets.length > 0) {
+        if (masterIncidents.length > 0) {
+          html += `<h2 style="margin-top:24px;margin-bottom:12px">Individual Tickets</h2>`;
+        }
+        html += `<div class="card" style="padding:0">
+          <table>
+            <thead><tr><th>ID</th><th>Title / Service</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>`;
+        orphanTickets.forEach(t => {
+          html += `<tr>
+            <td class="mono">${esc(t.id)}</td>
+            <td>${esc(t.title || t.raw_signal)}</td>
+            <td><span class="chip ${sevClass(t.severity)}">${esc(t.severity)}</span></td>
+            <td><span class="chip ${statusClass(t.status)}">${esc(t.status)}</span></td>
+            <td><button onclick="viewTicket('${esc(t.id)}')" class="text-sm">View Details</button></td>
+          </tr>`;
+        });
+        html += `</tbody></table></div>`;
+      }
+
+      container.innerHTML = html;
+    } catch(e) { console.error('loadTickets error', e); }
+  }
+
+  /**
+   * renderMasterIncidentCard(mi)
+   * Returns the HTML for the Master Incident card shown on the dashboard.
+   * Includes:
+   *   - Header with MI-ID, overall severity chip, status chip, service tags
+   *   - Sub-ticket rows with individual severity colour-coding
+   *   - Bob's correlation summary
+   *   - ONE "Approve Master Incident" / "Reject" button pair
+   */
+  function renderMasterIncidentCard(mi) {
+    const isResolved = mi.status === 'resolved';
+    const isRejected = mi.status === 'rejected';
+    const isDone = isResolved || isRejected;
+
+    // Sub-ticket rows
+    const subRows = (mi.tickets || []).map(t => `
+      <div class="sub-ticket-row">
+        <span class="sub-ticket-id">${esc(t.id)}</span>
+        <span class="chip ${sevClass(t.severity)}">${esc(t.severity)}</span>
+        <span class="sub-ticket-title">${esc(t.title || t.raw_signal)}</span>
+        <span class="chip ${statusClass(t.status)}" style="margin-left:auto">${esc(t.status)}</span>
+        <button onclick="viewTicket('${esc(t.id)}')" class="text-sm" style="padding:4px 8px;font-size:11px">Details</button>
+      </div>`).join('');
+
+    // Service tags
+    const serviceTags = (mi.services_affected || []).map(s =>
+      `<span class="chip info" style="font-size:10px">${esc(s)}</span>`).join(' ');
+
+    // Correlation summary (newlines → <br>)
+    const summaryHtml = esc(mi.correlation_summary || '').replace(/\n/g, '<br>');
+
+    // Approve/Reject gate (only if open)
+    const gateHtml = !isDone ? `
+      <div class="gate" style="margin:0 20px 20px 20px">
+        <h3 style="color:var(--warn);font-size:14px;margin-bottom:8px">⛔ Approval Gate — Human Verification Required</h3>
+        <p class="text-sm mb-4" style="color:rgba(255,255,255,0.8)">
+          Approving will execute the root-cause fix (rollback ticket-booking) and automatically
+          resolve all ${mi.ticket_ids.length} correlated tickets. This is a mutating action on a live workload.
+        </p>
+        <div class="flex gap-4" id="gate-btns-${esc(mi.master_incident_id)}">
+          <button class="approve flex items-center gap-2"
+            onclick="approveMasterIncident('${esc(mi.master_incident_id)}', '${esc(mi.ticket_ids[0])}', true)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Approve Master Incident
+          </button>
+          <button class="reject"
+            onclick="approveMasterIncident('${esc(mi.master_incident_id)}', '${esc(mi.ticket_ids[0])}', false)">
+            Reject Plan
+          </button>
+        </div>
+        <div id="outcome-area-${esc(mi.master_incident_id)}" class="mt-4"></div>
+      </div>` : `
+      <div class="banner ${isResolved ? 'ok' : 'bad'}" style="margin: 0 20px 20px 20px">
+        ${isResolved ? '✅' : '🚫'} Master Incident <strong>${esc(mi.master_incident_id)}</strong> is
+        <strong>${esc(mi.status.toUpperCase())}</strong>.
+        All ${(mi.ticket_ids || []).length} correlated tickets have been ${esc(mi.status)}.
+        See History for the audit record.
+      </div>`;
+
+    return `
+      <div class="master-incident-card">
+        <div class="master-incident-header">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span style="font-size:20px">🔥</span>
+            <span class="master-incident-id">${esc(mi.master_incident_id)}</span>
+            <span class="chip critical">MASTER INCIDENT</span>
+            <span class="chip ${sevClass(mi.severity)}">${esc(mi.severity)}</span>
+            <span class="chip ${statusClass(mi.status)}">${esc(mi.status)}</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap" style="margin-top:6px">
+            <span class="text-muted text-sm">Services affected:</span>
+            ${serviceTags}
+          </div>
+        </div>
+
+        <div class="sub-tickets-list">
+          <h3 style="margin-bottom:10px">Correlated Tickets (${(mi.tickets || []).length})</h3>
+          ${subRows || '<div class="text-muted text-sm">No sub-tickets</div>'}
+        </div>
+
+        <div class="correlation-box">
+          <h4>🔗 IBM Bob's Correlation Summary</h4>
+          <pre>${summaryHtml}</pre>
+        </div>
+
+        ${gateHtml}
+      </div>`;
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+  async function loadHistory() {
+    try {
+      const res = await fetch('/api/records');
+      const records = await res.json();
+      const tbody = records.map(r => `
+        <tr>
+          <td class="mono">
+            <a href="/api/records/${esc(r.incident_id)}" target="_blank"
+               style="color:var(--accent);text-decoration:none">${esc(r.incident_id)}</a>
+          </td>
+          <td>${new Date(r.created_at).toLocaleString()}</td>
+          <td><span class="chip ${r.outcome === 'resolved' ? 'ok' : (r.outcome.includes('blocked') ? 'warn' : 'bad')}">${esc(r.outcome)}</span></td>
+        </tr>`).join('');
+      document.getElementById('history-table').querySelector('tbody').innerHTML =
+        records.length ? tbody : '<tr><td colspan="3" style="text-align:center" class="text-muted">No records found</td></tr>';
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Watcher toggle ────────────────────────────────────────────────────────
+  async function toggleWatcher(action) {
+    await fetch(`/api/watcher/${action}`, { method: 'POST' });
+    loadDashboardData();
+  }
+
+  // ── Detect ────────────────────────────────────────────────────────────────
+  /**
+   * Clicks "Detect & Assess". POSTs to /api/detect.
+   * The server now returns a Many-to-One response:
+   *   { master_incident_id, ticket_ids, tickets, correlation_summary }
+   * We navigate directly to the Master Incident detail view.
+   */
+  async function detect() {
+    const btn = document.getElementById('detect-btn');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="border-color:#000;border-top-color:transparent"></span> Analyzing...`;
+    try {
+      const res = await fetch('/api/detect', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.master_incident_id) {
+        // Many-to-One path: show the Master Incident detail directly
+        await loadTickets(false);
+        showMasterIncidentDetail(data);
+      } else if (data.id) {
+        // Legacy single-ticket path (backward compat)
+        viewTicket(data.id);
+      } else {
+        await loadTickets(false);
+        nav('dashboard');
+      }
+    } catch(e) {
+      alert('Detection failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Detect &amp; Assess`;
+    }
+  }
+
+  // ── Master Incident Detail ────────────────────────────────────────────────
+  /**
+   * Navigate to the full Master Incident detail page.
+   * `miData` is the /api/detect response OR a master_incident entry from /api/tickets.
+   */
+  function showMasterIncidentDetail(miData) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-master-incident').classList.add('active');
+    document.getElementById('page-title').textContent = `Master Incident: ${miData.master_incident_id}`;
+    renderMasterIncidentDetail(miData);
+  }
+
+  function renderMasterIncidentDetail(miData) {
+    // miData may come from /api/detect OR from /api/tickets (type=master_incident)
+    const tickets  = miData.tickets || [];
+    const miId     = miData.master_incident_id;
+    const summary  = miData.correlation_summary || '';
+    const services = miData.services_affected || tickets.map(t => t.service_name);
+    const severity = miData.severity || 'critical';
+    const status   = miData.status || 'open';
+    const ticketIds = miData.ticket_ids || tickets.map(t => t.id);
+
+    const isResolved = status === 'resolved';
+    const isDone     = isResolved || status === 'rejected';
+
+    // Render individual ticket detail cards (collapsible feel via separate cards)
+    let ticketCards = tickets.map(t => {
+      const d = t.detection || {};
+      const c = (d.correlation || {});
+      const w = ((d.evidence || {}).workload || {});
+      const h = ((d.evidence || {}).application_health || {});
+      const p = (d.plan || {});
+      const rep = (d.hypotheses || {});
+      const im = (p.impact || {});
+      const action = (p.chosen_action || {});
+
+      return `
+        <div class="card" style="border-left: 3px solid var(--${sevClass(t.severity)}-color, var(--accent))">
+          <div class="flex justify-between items-center mb-4" style="flex-wrap:wrap;gap:8px">
+            <div class="flex items-center gap-2">
+              <span class="mono text-muted">${esc(t.id)}</span>
+              <span class="chip ${sevClass(t.severity)}">${esc(t.severity)}</span>
+              <span class="chip ${statusClass(t.status)}">${esc(t.status)}</span>
+            </div>
+            <strong>${esc(t.title || t.raw_signal)}</strong>
+          </div>
+
+          ${c.summary ? `<div class="banner ${c.is_incident ? 'bad' : 'ok'}">
+            <div style="font-size:16px;margin-right:8px">${c.is_incident ? '🚨' : '✅'}</div>
+            <div class="text-sm">${esc(c.summary)}</div>
+          </div>` : ''}
+
+          <div class="grid-4 mb-4">
+            ${w.name ? `<div class="kv-box"><div class="k">Workload</div><div class="v mono">${esc(w.name)}</div></div>` : ''}
+            ${w.ready_replicas != null ? `<div class="kv-box"><div class="k">Ready</div><div class="v">${w.ready_replicas}/${w.desired_replicas}</div></div>` : ''}
+            ${h.status_code ? `<div class="kv-box"><div class="k">App Health</div><div class="v">${h.status_code == 200 ? '<span class="chip ok">200 OK</span>' : `<span class="chip bad">${h.status_code}</span>`}</div></div>` : ''}
+            ${w.revision ? `<div class="kv-box"><div class="k">Revision</div><div class="v mono">${esc(w.revision)}</div></div>` : ''}
+          </div>
+
+          ${(d.evidence && d.evidence.pods && d.evidence.pods.length) ? `
+            <table class="mb-4"><thead><tr><th>Pod</th><th>Ready</th><th>Restarts</th><th>Image</th></tr></thead><tbody>
+              ${d.evidence.pods.map(pod => `<tr>
+                <td class="mono">${esc(pod.name)}</td>
+                <td>${pod.ready ? '<span class="chip ok">Ready</span>' : '<span class="chip bad">Failing</span>'}</td>
+                <td>${pod.restarts != null ? pod.restarts : '—'}</td>
+                <td class="mono text-sm">${esc((pod.image || '').split('@')[0])}</td>
+              </tr>`).join('')}
+            </tbody></table>` : ''}
+
+          ${rep.root_cause_summary ? `<div class="text-sm text-muted mb-2">
+            <strong>Hypothesis:</strong> ${esc(rep.root_cause_summary)}
+          </div>` : ''}
+
+          ${action.description ? `<div class="kv-box" style="border-left:3px solid var(--accent)">
+            <div class="k">Proposed Action</div>
+            <div class="v text-sm">${esc(action.description)}</div>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+
+    // Master plan is always ticket[0]'s plan (root cause fix)
+    const rootTicket = tickets[0] || {};
+    const rootPlan   = (rootTicket.detection || {}).plan || {};
+    const rootAction = rootPlan.chosen_action || {};
+    const rootImpact = rootPlan.impact || {};
+    const rootVerify = rootPlan.verification || {};
+
+    const masterPlanHtml = rootAction.tool ? `
+      <div class="card">
+        <h3>Master Remediation Plan (Root Cause Fix)</h3>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="chip info mono">${esc(rootAction.tool)}</span>
+          <span class="chip ${rootImpact.risk_level === 'low' ? 'ok' : 'bad'}">${esc(rootImpact.risk_level || '')} risk</span>
+          <span class="chip ${rootImpact.reversible ? 'ok' : 'bad'}">${rootImpact.reversible ? '↩ Reversible' : '⚠ Irreversible'}</span>
+        </div>
+        <div class="text-muted text-sm mb-4">${esc(rootAction.description)}</div>
+        <div class="grid-2 mb-4">
+          <div>
+            <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:4px">Blast Radius</div>
+            <div class="text-sm">${esc(rootImpact.blast_radius || '—')}</div>
+          </div>
+          <div>
+            <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:4px">User-Facing Risk</div>
+            <div class="text-sm">${esc(rootImpact.user_facing_risk || '—')}</div>
+          </div>
+        </div>
+        ${rootVerify.checks && rootVerify.checks.length ? `
+          <div>
+            <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:6px">Dual-Signal Verification Checks (C4)</div>
+            <ul class="text-sm" style="padding-left:16px;line-height:1.7;margin:0">
+              ${rootVerify.checks.map(chk => `<li>${esc(chk)}</li>`).join('')}
+            </ul>
+          </div>` : ''}
+      </div>` : '';
+
+    // Approval gate
+    const gateHtml = !isDone ? `
+      <div class="gate">
+        <h3 style="color:var(--warn);font-size:14px;margin-bottom:8px">⛔ Approval Gate — Human Verification Required</h3>
+        <p class="text-sm mb-4" style="color:rgba(255,255,255,0.8)">
+          Approving will execute the root-cause fix and automatically resolve
+          ALL <strong>${ticketIds.length} correlated tickets</strong> (${services.join(', ')}).
+          This action rolls back <code>ticket-booking</code> to the last stable revision and
+          is fully reversible. Cascading failures in payment-service and frontend-gateway
+          will resolve automatically.
+        </p>
+        <div class="flex gap-4" id="detail-gate-btns">
+          <button class="approve flex items-center gap-2"
+              onclick="approveMasterIncident('${esc(miId)}', '${esc(ticketIds[0])}', true)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Approve &amp; Execute (Resolves ${ticketIds.length} tickets)
+          </button>
+          <button class="reject"
+              onclick="approveMasterIncident('${esc(miId)}', '${esc(ticketIds[0])}', false)">
+            Reject Plan
+          </button>
+        </div>
+        <div id="detail-outcome-area" class="mt-4"></div>
+      </div>` : `
+      <div class="banner ${isResolved ? 'ok' : 'bad'}">
+        ${isResolved ? '✅' : '🚫'} Master Incident <strong>${esc(miId)}</strong>
+        is <strong>${esc(status.toUpperCase())}</strong>.
+        All ${ticketIds.length} tickets have been ${esc(status)}.
+        See <a onclick="nav('history')" style="cursor:pointer;color:inherit;text-decoration:underline">History</a> for the audit record.
+      </div>`;
+
+    const html = `
+      <div class="flex justify-between items-center mb-4" style="flex-wrap:wrap;gap:12px">
+        <div class="flex items-center gap-3">
+          <span style="font-size:24px">🔥</span>
+          <div>
+            <h2 style="margin:0">${esc(miId)}</h2>
+            <div class="text-muted text-sm">Master Incident — ${ticketIds.length} correlated tickets</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="chip critical">MASTER INCIDENT</span>
+          <span class="chip ${sevClass(severity)}">${esc(severity)}</span>
+          <span class="chip ${statusClass(status)}">${esc(status)}</span>
+        </div>
+      </div>
+
+      <div class="correlation-box" style="margin-bottom:20px">
+        <h4>🔗 IBM Bob's Correlation Summary</h4>
+        <pre>${esc(summary).replace(/\n/g, '<br>')}</pre>
+      </div>
+
+      ${masterPlanHtml}
+
+      ${gateHtml}
+
+      <h2 style="margin-top:24px;margin-bottom:12px">Individual Ticket Evidence</h2>
+      ${ticketCards}`;
+
+    document.getElementById('master-incident-detail-content').innerHTML = html;
+  }
+
+  // ── Single Ticket Detail ──────────────────────────────────────────────────
+  async function viewTicket(id) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-ticket-detail').classList.add('active');
+    document.getElementById('page-title').textContent = `Ticket: ${id}`;
+    try {
+      const res = await fetch(`/api/tickets/${id}`);
+      const t = await res.json();
+      renderTicketDetail(t);
+    } catch(e) {
+      document.getElementById('ticket-detail-content').innerHTML =
+        `<div class="banner bad">Error loading ticket: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderTicketDetail(ticket) {
+    const d   = ticket.detection || {};
+    const c   = d.correlation || {};
+    const w   = (d.evidence || {}).workload || {};
+    const h   = (d.evidence || {}).application_health || {};
+    const p   = d.plan || {};
+    const rep = d.hypotheses || {};
+    const im  = p.impact || {};
+
+    let html = '';
+
+    // Banner
+    html += `<div class="banner ${c.is_incident ? 'bad' : 'ok'}">
+      <div style="font-size:18px;margin-right:8px">${c.is_incident ? '🚨' : '✅'}</div>
+      <div>
+        <div style="font-weight:700;font-size:15px">${c.is_incident ? 'INCIDENT' : 'HEALTHY'}</div>
+        <div class="text-sm" style="font-weight:400;opacity:0.9">${esc(c.summary)}</div>
+      </div>
+    </div>`;
+
+    // Evidence
+    html += `<div class="card">
+      <h3>Evidence (Read-Only — MCP Tools)</h3>
+      <div class="grid-4 mb-4">
+        ${w.name ? `<div class="kv-box"><div class="k">Workload</div><div class="v mono">${esc(w.name)}</div></div>` : ''}
+        ${w.ready_replicas != null ? `<div class="kv-box"><div class="k">Ready</div><div class="v">${w.ready_replicas}/${w.desired_replicas}</div></div>` : ''}
+        ${h.status_code ? `<div class="kv-box"><div class="k">App Health</div><div class="v">${h.status_code == 200 ? '<span class="chip ok">200 OK</span>' : `<span class="chip bad">${h.status_code}</span>`}</div></div>` : ''}
+        ${w.revision ? `<div class="kv-box"><div class="k">Revision</div><div class="v mono">${esc(w.revision)}</div></div>` : ''}
+      </div>`;
+    if (d.evidence && d.evidence.pods && d.evidence.pods.length) {
+      html += `<table><thead><tr><th>Pod</th><th>Ready</th><th>Restarts</th><th>Image</th></tr></thead><tbody>`;
+      d.evidence.pods.forEach(pod => {
+        html += `<tr>
+          <td class="mono">${esc(pod.name)}</td>
+          <td>${pod.ready ? '<span class="chip ok">Ready</span>' : '<span class="chip bad">Failing</span>'}</td>
+          <td>${pod.restarts != null ? pod.restarts : '—'}</td>
+          <td class="mono text-sm">${esc((pod.image || '').split('@')[0])}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+
+    // Correlation & Hypotheses
+    if (c.signals || rep.root_cause_summary) {
+      html += `<div class="grid-2">`;
+      if (c.signals) {
+        html += `<div class="card">
+          <h3>Correlation Signals <span class="chip ${sevClass(c.confidence)}" style="float:right;margin-top:-4px">${esc(c.confidence)} confidence</span></h3>
+          <ul class="text-sm mt-2" style="padding-left:16px;line-height:1.8">
+            ${(c.signals || []).map(s => `<li>${esc(s)}</li>`).join('')}
+          </ul>
+        </div>`;
+      }
+      if (rep.root_cause_summary) {
+        html += `<div class="card">
+          <h3>Hypotheses <span class="chip ${rep.source === 'gemini' ? 'info' : 'warn'}" style="float:right;margin-top:-4px">${esc(rep.source)}</span></h3>
+          <div class="text-sm text-muted mb-2">${esc(rep.root_cause_summary)}</div>
+          ${(rep.hypotheses || []).map(hyp => `
+            <div class="kv-box mt-2" style="border-left:3px solid var(--accent)">
+              <div class="flex justify-between items-center mb-1">
+                <strong style="color:var(--fg)">${esc(hyp.title)}</strong>
+                <span class="chip ${sevClass(hyp.likelihood)}">${esc(hyp.likelihood)}</span>
+              </div>
+              <div class="text-sm text-muted mb-2">${esc(hyp.explanation)}</div>
+              <div class="text-sm"><span class="text-muted">Recommendation:</span> ${esc(hyp.recommended_action)}</div>
+            </div>`).join('')}
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Plan
+    if (p.chosen_action) {
+      html += `<div class="card">
+        <h3>Impact-Aware Remediation Plan (C3)</h3>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="chip info mono">${esc(p.chosen_action.tool)}</span>
+        </div>
+        <div class="text-muted text-sm mb-4">${esc(p.chosen_action.description)}</div>
+        <div class="grid-3 mb-4">
+          <div class="kv-box"><div class="k">Risk Level</div><div class="v"><span class="chip ${im.risk_level === 'low' ? 'ok' : (im.risk_level === 'high' ? 'bad' : 'warn')}">${esc(im.risk_level)}</span></div></div>
+          <div class="kv-box"><div class="k">Reversible</div><div class="v">${im.reversible ? '<span class="chip ok">Yes</span>' : '<span class="chip bad">No</span>'}</div></div>
+          <div class="kv-box"><div class="k">Scope</div><div class="v mono">${esc(im.scope)}</div></div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:4px">Blast Radius</div>
+            <div class="text-sm mb-3">${esc(im.blast_radius)}</div>
+          </div>
+          <div>
+            <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:4px">User-Facing Risk</div>
+            <div class="text-sm mb-3">${esc(im.user_facing_risk)}</div>
+          </div>
+        </div>
+        <div>
+          <div class="text-sm text-muted uppercase" style="font-size:11px;font-weight:600;margin-bottom:6px">Verification Checks (C4 Dual-Signal)</div>
+          <ul class="text-sm" style="padding-left:16px;line-height:1.6;margin:0">
+            ${((p.verification || {}).checks || []).map(chk => `<li>${esc(chk)}</li>`).join('')}
+          </ul>
+        </div>
+      </div>`;
+    }
+
+    // Approval gate for single ticket (backward compat)
+    if (p.requires_approval && ticket.status !== 'resolved' && ticket.status !== 'rejected') {
+      html += `<div class="gate">
+        <h3 style="color:var(--warn);font-size:14px;margin-bottom:8px">⛔ Approval Gate — Human Verification Required</h3>
+        <p class="text-sm mb-4" style="color:rgba(255,255,255,0.8)">${esc(p.approval_reason)}</p>
+        <div class="flex gap-4">
+          <button class="approve flex items-center gap-2" onclick="decide('${esc(ticket.id)}', true)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Approve &amp; Execute
+          </button>
+          <button class="reject" onclick="decide('${esc(ticket.id)}', false)">Reject Plan</button>
+        </div>
+        <div id="outcome-area" class="mt-4"></div>
+      </div>`;
+    } else if (ticket.status === 'resolved' || ticket.status === 'rejected') {
+      html += `<div class="banner ${ticket.status === 'resolved' ? 'ok' : 'bad'}">
+        Ticket is ${esc(ticket.status.toUpperCase())}. See History for execution records.
+      </div>`;
+    }
+
+    document.getElementById('ticket-detail-content').innerHTML = html;
+  }
+
+  // ── Approve / Reject — Master Incident (Many-to-One) ──────────────────────
+  /**
+   * Called from both the dashboard card button and the detail-page gate.
+   * Sends master_incident_id so the server resolves ALL correlated tickets at once.
+   */
+  async function approveMasterIncident(masterIncidentId, primaryTicketId, approved) {
+    // Disable buttons in both possible locations
+    ['gate-btns-' + masterIncidentId, 'detail-gate-btns'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.querySelectorAll('button').forEach(b => b.disabled = true);
+    });
+
+    const areaIds = [
+      'outcome-area-' + masterIncidentId,
+      'detail-outcome-area',
+    ];
+    const msg = approved
+      ? 'Executing root-cause fix and running dual-signal verification...'
+      : 'Recording rejection...';
+    areaIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div class="flex items-center gap-2 text-sm"><span class="spinner"></span> ${msg}</div>`;
+    });
+
+    try {
+      const endpoint = approved ? '/api/approve' : '/api/reject';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket_id: primaryTicketId,
+          master_incident_id: masterIncidentId,
+        }),
+      });
+      const data = await res.json();
+      const rec = data.record;
+      const resolvedIds = data.resolved_ticket_ids || [];
+
+      let resultHtml = `<div class="mt-4 p-4" style="background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border)">`;
+      resultHtml += `<h4 class="mb-2" style="font-size:14px">
+        Execution Result
+        <span class="chip ${rec.outcome === 'resolved' ? 'ok' : 'warn'}" style="margin-left:8px;font-weight:normal">${esc(rec.outcome)}</span>
+      </h4>`;
+
+      if (resolvedIds.length > 1) {
+        resultHtml += `<div class="text-sm mb-3" style="color:var(--ok)">
+          ✅ ${resolvedIds.length} tickets resolved: ${resolvedIds.map(id => `<span class="mono">${esc(id)}</span>`).join(', ')}
+        </div>`;
+      }
+
+      if (rec.verification && rec.verification.checks) {
+        resultHtml += `<table class="mt-2 text-sm"><tbody>`;
+        rec.verification.checks.forEach(chk => {
+          resultHtml += `<tr>
+            <td style="width:80px">${chk.passed ? '<span class="chip ok">PASS</span>' : '<span class="chip bad">FAIL</span>'}</td>
+            <td class="mono">${esc(chk.name)}</td>
+            <td class="text-muted">${esc(chk.detail)}</td>
+          </tr>`;
+        });
+        resultHtml += `</tbody></table>`;
+      }
+      resultHtml += `</div>`;
+
+      areaIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = resultHtml;
+      });
+
+      // Refresh the tickets list so status chips update
+      await loadTickets(false);
+    } catch(e) {
+      const errHtml = `<div class="banner bad mt-4">Failed: ${esc(e.message)}</div>`;
+      areaIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = errHtml;
+      });
+      ['gate-btns-' + masterIncidentId, 'detail-gate-btns'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.querySelectorAll('button').forEach(b => b.disabled = false);
+      });
+    }
+  }
+
+  // ── Approve / Reject — Legacy single ticket ───────────────────────────────
+  async function decide(ticketId, approved) {
+    const area = document.getElementById('outcome-area');
+    const btns = document.querySelectorAll('.gate button');
+    btns.forEach(b => b.disabled = true);
+    area.innerHTML = `<div class="flex items-center gap-2 text-sm"><span class="spinner"></span> ${approved ? 'Executing plan and running verification...' : 'Recording rejection...'}</div>`;
+    try {
+      const endpoint = approved ? '/api/approve' : '/api/reject';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId }),
+      });
+      const data = await res.json();
+      const rec = data.record;
+
+      let html = `<div class="mt-4 p-4" style="background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border)">`;
+      html += `<h4 class="mb-2" style="font-size:14px">Execution Result <span class="chip ${rec.outcome === 'resolved' ? 'ok' : 'warn'}" style="margin-left:8px;font-weight:normal">${esc(rec.outcome)}</span></h4>`;
+      if (rec.verification && rec.verification.checks) {
+        html += `<table class="mt-3 text-sm"><tbody>`;
+        rec.verification.checks.forEach(chk => {
+          html += `<tr>
+            <td style="width:80px">${chk.passed ? '<span class="chip ok">PASS</span>' : '<span class="chip bad">FAIL</span>'}</td>
+            <td class="mono">${esc(chk.name)}</td>
+            <td class="text-muted">${esc(chk.detail)}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+      }
+      html += `</div>`;
+      area.innerHTML = html;
+      loadTickets(false);
+    } catch(e) {
+      area.innerHTML = `<div class="banner bad mt-4">Failed: ${esc(e.message)}</div>`;
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadDashboardData();
+  setInterval(() => {
+    if (document.getElementById('view-dashboard').classList.contains('active')) {
+      loadDashboardData();
+    }
+  }, 30000);
+</script>
+</body>
+</html>
