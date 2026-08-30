@@ -15,6 +15,7 @@ This describes what still has to happen before 19:30 IST today.
 | [`04_HANDOFF_VERONA.md`](04_HANDOFF_VERONA.md) | API reference for the dashboard; paste-ready chat message | Send tonight |
 | [`05_HANDOFF_RAMANA.md`](05_HANDOFF_RAMANA.md) | `BOB-001` and the statements; paste-ready chat message | Send tonight |
 | [`06_DEMO_SCRIPT.md`](06_DEMO_SCRIPT.md) | `SUB-004` — video script, two versions, with narration | Before recording |
+| [`07_WORK_INSIDE_IBM_BOB.md`](07_WORK_INSIDE_IBM_BOB.md) | **What must be done in the Bob application itself** — the part no code can do | Morning, first |
 | [`SUB-001_PROBLEM_AND_SOLUTION.md`](SUB-001_PROBLEM_AND_SOLUTION.md) | Draft, ready for review | Ramana reviews |
 | [`SUB-002_HOW_WE_USED_IBM_BOB.md`](SUB-002_HOW_WE_USED_IBM_BOB.md) | Draft with two variants — pick after `BOB-001` | Ramana reviews |
 

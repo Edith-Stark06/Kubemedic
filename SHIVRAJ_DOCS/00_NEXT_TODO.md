@@ -71,6 +71,15 @@ items (the video and the Bob statement) are worse when written tired.
     outcomes. Sinking four hours into an endpoint that may not be the
     sanctioned one is how the whole entry gets lost.
 
+- [ ] **B1a · Run a real incident analysis inside IBM Bob, using our own MCP
+  server.** `07_WORK_INSIDE_IBM_BOB.md` B1. **Do this before anything else in
+  the morning.** It does not depend on the unverified REST endpoint: open the
+  repo as a Bob workspace, Bob launches our evidence server itself, inject the
+  incident, and work it in `KubeMedic Analyst` mode. That converts "Bob is the
+  reasoning layer" from a design claim into something a judge watched happen,
+  and it produces both the session to export and the footage for the video.
+  **45 min.**
+
 - [ ] **B2 · Export the IBM Bob report.** This is a **required deliverable**
   and the one teams forget. Procedure in `02_BOB_REPORT_EXPORT.md`. It is
   required whether or not B1 succeeds. **30 min.**
