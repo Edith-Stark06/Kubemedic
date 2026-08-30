@@ -36,19 +36,30 @@ def get_adapter() -> "RealAdapter | MockAdapter":
 # Real adapter — forwards to Ramana's HTTP API
 # ---------------------------------------------------------------------------
 
+class FeedbackRequired(Exception):
+    """
+    The agent refused a rejection that carried no reason.
+
+    The agent returns 400 feedback_required regardless of what the UI allows,
+    because the reason is not a formality -- it becomes the incident context
+    IBM Bob uses to produce the revised plan. Named here so the dashboard can
+    show the reviewer something useful instead of a generic HTTP error.
+    """
+
+
 class RealAdapter:
     def __init__(self, base_url: str) -> None:
         self.base = base_url
 
     async def list_incidents(self) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = client.get(f"{self.base}/incidents")
+            r = await client.get(f"{self.base}/incidents")
             r.raise_for_status()
             return r.json()
 
     async def get_incident(self, incident_id: str) -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = client.get(f"{self.base}/incidents/{incident_id}")
+            r = await client.get(f"{self.base}/incidents/{incident_id}")
             if r.status_code == 404:
                 return None
             r.raise_for_status()
@@ -67,10 +78,19 @@ class RealAdapter:
             "feedback": feedback,
         }
         async with httpx.AsyncClient(timeout=10) as client:
-            r = client.post(
+            r = await client.post(
                 f"{self.base}/incidents/{incident_id}/decision",
                 json=payload,
             )
+            # A rejection with no reason comes back 400 feedback_required. The
+            # agent enforces that server-side, so surface it rather than
+            # raising a bare HTTP error the UI cannot explain.
+            if r.status_code == 400:
+                detail = r.json().get("detail", {})
+                if isinstance(detail, dict) and detail.get("error") == "feedback_required":
+                    raise FeedbackRequired(
+                        detail.get("message", "A rejection must state why.")
+                    )
             r.raise_for_status()
             return r.json()
 
