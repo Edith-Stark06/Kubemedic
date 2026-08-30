@@ -60,6 +60,9 @@ class EvidenceSnapshot(BaseModel):
 # ---------------------------------------------------------------------------
 
 class CorrelationResult(BaseModel):
+    _strip_nulls = model_validator(mode="before")(
+        classmethod(lambda cls, data: _drop_explicit_nulls(data))
+    )
     """Output of the correlation step.  Maps N open tickets → 1 master incident."""
     master_incident_id: str
     member_tickets: list[str]          # ticket IDs that belong to this incident
@@ -72,7 +75,34 @@ class CorrelationResult(BaseModel):
 # Bob analysis — exactly mirrors evidence-schema.md success shape
 # ---------------------------------------------------------------------------
 
+
+def _drop_explicit_nulls(data: Any) -> Any:
+    """
+    Treat an explicit `null` as "field omitted" for anything that has a default.
+
+    A model asked for optional fields will happily answer
+    `"action_parameters": null` or `"timeline": null` -- a live Gemini call did
+    exactly that -- and pydantic then rejects the whole analysis because those
+    fields are typed as a dict and a list, not Optional. Throwing away a
+    correct diagnosis over a null is the wrong trade: the field has a default
+    precisely because its absence is acceptable, and `null` and absent mean the
+    same thing here.
+
+    Required fields are untouched, so a null where a value is genuinely needed
+    still fails.
+    """
+    if not isinstance(data, dict):
+        return data
+    return {
+        key: value for key, value in data.items()
+        if value is not None or key not in _OPTIONAL_WITH_DEFAULTS
+    }
+
+
 class Hypothesis(BaseModel):
+    _strip_nulls = model_validator(mode="before")(
+        classmethod(lambda cls, data: _drop_explicit_nulls(data))
+    )
     rank: int
     statement: str
     confidence: Literal["high", "medium", "low"]
@@ -83,18 +113,27 @@ class Hypothesis(BaseModel):
 
 
 class RootCause(BaseModel):
+    _strip_nulls = model_validator(mode="before")(
+        classmethod(lambda cls, data: _drop_explicit_nulls(data))
+    )
     statement: str
     confidence: Literal["high", "medium", "low"]
     is_inference: bool = True
 
 
 class TimelineEvent(BaseModel):
+    _strip_nulls = model_validator(mode="before")(
+        classmethod(lambda cls, data: _drop_explicit_nulls(data))
+    )
     t: str
     event: str
     source: str
 
 
 class BobAnalysis(BaseModel):
+    _strip_nulls = model_validator(mode="before")(
+        classmethod(lambda cls, data: _drop_explicit_nulls(data))
+    )
     """Parsed, validated output of one IBM Bob reasoning call."""
     schema_version: str = "1.0"
     # Provider id, or "unavailable". Widened from a Bob-only literal when
@@ -427,3 +466,13 @@ class IncidentRecord(BaseModel):
             ),
             audit_log=inc.audit_log,
         )
+
+
+# Fields across the analysis models that carry a default, so an explicit null
+# from a model is safely equivalent to omitting them. Computed rather than
+# hand-listed so a new field with a default is covered automatically.
+_OPTIONAL_WITH_DEFAULTS: set[str] = set()
+for _model in (Hypothesis, RootCause, TimelineEvent, CorrelationResult, BobAnalysis):
+    for _name, _field in _model.model_fields.items():
+        if not _field.is_required():
+            _OPTIONAL_WITH_DEFAULTS.add(_name)

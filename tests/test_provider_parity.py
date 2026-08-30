@@ -325,3 +325,61 @@ class TestStatusPreservesCounters:
         actives = [e for e in provider_status()["providers"] if e.get("active")]
         assert len(actives) == 1
         assert actives[0]["name"] == "watsonx"
+
+
+class TestExplicitNullsFromRealModels:
+    """
+    A live Gemini call returned `"action_parameters": null` and the whole
+    analysis was rejected -- a correct diagnosis thrown away because a field
+    with a default was explicitly null rather than absent.
+
+    A model asked for optional fields will answer null for the ones it has
+    nothing to say about. `null` and absent mean the same thing for a field
+    that has a default, so it is treated that way. A null where a value is
+    genuinely required still fails.
+    """
+
+    @pytest.mark.parametrize("field", [
+        "action_parameters", "hypotheses", "timeline", "correlation",
+        "missing_signals", "partial_evidence", "notes_for_reviewer",
+    ])
+    def test_null_for_a_defaulted_field_is_accepted(self, field):
+        raw = dict(VALID_ANALYSIS)
+        raw[field] = None
+        analysis = BobAnalysis.from_raw(raw)
+        assert analysis.recommended_action.value == "rollback_deployment"
+
+    def test_null_inside_a_hypothesis_is_accepted(self):
+        raw = dict(VALID_ANALYSIS)
+        raw["hypotheses"] = [{
+            "rank": 1, "statement": "x", "confidence": "high",
+            "confidence_reason": "y",
+            "supporting_evidence": None, "contradicting_evidence": None,
+        }]
+        assert BobAnalysis.from_raw(raw).hypotheses[0].supporting_evidence == []
+
+    def test_null_for_a_required_field_still_fails(self):
+        """The leniency must not extend to fields that genuinely need a value."""
+        raw = dict(VALID_ANALYSIS)
+        raw["hypotheses"] = [{
+            "rank": None, "statement": "x",
+            "confidence": "high", "confidence_reason": "y",
+        }]
+        with pytest.raises(Exception):
+            BobAnalysis.from_raw(raw)
+
+    def test_null_target_with_an_action_still_fails(self):
+        raw = dict(VALID_ANALYSIS, action_target=None)
+        with pytest.raises(Exception):
+            BobAnalysis.from_raw(raw)
+
+    def test_every_provider_survives_a_null_heavy_response(self, monkeypatch, tmp_path):
+        """Parity: this must hold for whichever engine answers."""
+        sparse = dict(VALID_ANALYSIS, action_parameters=None, timeline=None,
+                      correlation=None, notes_for_reviewer=None)
+        for provider in all_providers(monkeypatch, tmp_path):
+            monkeypatch.setattr(type(provider), "_invoke",
+                                lambda self, p: json.dumps(sparse))
+            result = provider.analyze(EVIDENCE, TICKETS)
+            assert result.ok, provider.id
+            assert BobAnalysis.from_raw(result.analysis).action_parameters == {}
