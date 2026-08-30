@@ -26,7 +26,7 @@ code. Nothing is hand-written.
 
 | File | What it shows |
 |---|---|
-| [`evidence/pytest-run.txt`](evidence/pytest-run.txt) | **221 passed** — the full suite at time of the validate run |
+| [`evidence/pytest-run.txt`](evidence/pytest-run.txt) | **282 passed** — the full suite at time of the validate run |
 | [`evidence/validate-run.txt`](evidence/validate-run.txt) | **29 assertions, 0 failures** against a live k3s cluster |
 | `evidence/INC-*.json` | A real audit record from that run |
 
@@ -91,7 +91,7 @@ found.
 git clone https://github.com/Edith-Stark06/Kubemedic.git
 cd Kubemedic
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest                # 238 passed, no cluster or credentials needed
+python -m pytest                # 282 passed, no cluster or credentials needed
 ```
 
 With a Kubernetes cluster, `README.md` has the demo steps and

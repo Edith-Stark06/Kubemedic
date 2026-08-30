@@ -60,13 +60,15 @@ agent/          reasoning, correlation, planning, execution, verification, audit
   models.py         every contract; the allowlist and the illegal transitions
   api.py            HTTP surface over the lifecycle
   k8s_client.py     the only module that changes a cluster
+  providers/        pluggable reasoning engines, one failure policy
+  secrets.py        every credential resolves through here
 mcp_server/     the evidence surface Bob is allowed to see
   evidence.py       read-only Kubernetes inspection
   server.py         MCP stdio server; --profile evidence is read-only
 k8s/            the ticket-booking demo workload
 workload/       the demo app; HEALTHY=false is the incident lever
 scripts/        inject, reset, and the end-to-end validation harness
-tests/          238 tests
+tests/          282 tests
 docs/           architecture, contracts, gaps, compliance
 ```
 
@@ -83,8 +85,28 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest
 ```
 
-Expected: `238 passed`. The suite needs no cluster and no credentials — the
+Expected: `282 passed`. The suite needs no cluster and no credentials — the
 Kubernetes API is mocked and every ticket test uses a temporary database.
+
+### Choosing the reasoning engine
+
+The engine is a configuration choice. Everything downstream is unchanged,
+because every provider returns the same validated contract.
+
+```bash
+KUBEMEDIC_REASONING_PROVIDER=ibm-bob   # default
+#                            watsonx   IBM watsonx.ai
+#                            anthropic Claude (development / fallback)
+#                            manual    an analysis from an interactive Bob session
+```
+
+`GET /api/provider` reports which engine is active, whether each is configured,
+and per-provider call and failure counters. It never probes the network and
+never echoes a credential.
+
+The `manual` provider needs **no credentials at all**: IBM Bob reasons
+interactively in the workspace, calling the read-only MCP evidence server
+itself, and its JSON is fed to the same pipeline through the same validation.
 
 ### Configuration
 

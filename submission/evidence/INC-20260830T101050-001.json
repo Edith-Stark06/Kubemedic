@@ -1,0 +1,123 @@
+{
+  "incident_id": "INC-20260830T101050-001",
+  "final_state": "RESOLVED",
+  "tickets": [
+    "TKT-20260830-101050-4984",
+    "TKT-20260830-101050-4855"
+  ],
+  "correlation": {
+    "master_incident_id": "INC-20260830T101050-001",
+    "member_tickets": [
+      "TKT-20260830-101050-4984",
+      "TKT-20260830-101050-4855"
+    ],
+    "excluded_tickets": [],
+    "correlation_basis": [
+      "TKT-20260830-101050-4984 references ticket-booking",
+      "TKT-20260830-101050-4984 created within incident window (2026-08-30T10:10:50.498436+00:00)",
+      "TKT-20260830-101050-4984 describes known failure symptoms",
+      "TKT-20260830-101050-4855 references ticket-booking",
+      "TKT-20260830-101050-4855 created within incident window (2026-08-30T10:10:50.485484+00:00)",
+      "TKT-20260830-101050-4855 describes known failure symptoms"
+    ],
+    "rationale": "2 ticket(s) correlated to deployment ticket-booking."
+  },
+  "analysis_source": "unavailable",
+  "bob_analysis": null,
+  "root_cause": null,
+  "recommended_action": null,
+  "human_decision": "approved",
+  "rejection_feedback": null,
+  "feedback_history": [
+    "Confirm the rollout history names a healthy revision before acting."
+  ],
+  "revision_count": 0,
+  "executed": true,
+  "verification_outcome": "PASS",
+  "created_at": "2026-08-30T10:10:50.711063Z",
+  "resolved_at": "2026-08-30T10:10:57.316664Z",
+  "audit_log": [
+    {
+      "step": "correlation",
+      "member_tickets": [
+        "TKT-20260830-101050-4984",
+        "TKT-20260830-101050-4855"
+      ],
+      "excluded_tickets": [],
+      "basis": [
+        "TKT-20260830-101050-4984 references ticket-booking",
+        "TKT-20260830-101050-4984 created within incident window (2026-08-30T10:10:50.498436+00:00)",
+        "TKT-20260830-101050-4984 describes known failure symptoms",
+        "TKT-20260830-101050-4855 references ticket-booking",
+        "TKT-20260830-101050-4855 created within incident window (2026-08-30T10:10:50.485484+00:00)",
+        "TKT-20260830-101050-4855 describes known failure symptoms"
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "ibm-bob",
+      "invoked_at": "2026-08-30T10:10:50.713458+00:00",
+      "invocation": [
+        "REST:https://cloud.manufact.com/api/v1/chats",
+        "mode=kubemedic-analyst"
+      ],
+      "duration_ms": 0,
+      "ok": false,
+      "error": "KUBEMEDIC_BOB_API_KEY is unset. Set it with KUBEMEDIC_BOB_AGENT_ID, or run Bob interactively in the workspace and use the manual provider.",
+      "analysis_source": "unavailable"
+    },
+    {
+      "step": "human_decision",
+      "decision": "rejected",
+      "approver": "validator",
+      "timestamp": "2026-08-30T10:10:50.844390+00:00",
+      "feedback": "Confirm the rollout history names a healthy revision before acting."
+    },
+    {
+      "step": "rejection_recorded",
+      "reason": "Confirm the rollout history names a healthy revision before acting.",
+      "executed": false,
+      "feedback_count": 1
+    },
+    {
+      "step": "human_decision",
+      "decision": "approved",
+      "approver": "validator",
+      "timestamp": "2026-08-30T10:10:51.097538+00:00",
+      "feedback": null
+    },
+    {
+      "step": "execute",
+      "action": "rollback_deployment",
+      "target": "ticket-booking",
+      "parameters": {
+        "to_revision": 49
+      },
+      "started_at": "2026-08-30T10:10:51.097603+00:00"
+    },
+    {
+      "step": "execute_result",
+      "success": true,
+      "message": "rollback_deployment on ticket-booking succeeded",
+      "completed_at": "2026-08-30T10:10:51.211508+00:00"
+    },
+    {
+      "step": "verification",
+      "outcome": "PASS",
+      "signals": [
+        {
+          "name": "rollout_healthy",
+          "passed": true,
+          "detail": "ready=True, updated=2, desired=2"
+        },
+        {
+          "name": "health_endpoint",
+          "passed": true,
+          "detail": "status_code=200, healthy=True"
+        }
+      ],
+      "detail": "Both signals green: rollout healthy and application health OK.",
+      "checked_at": "2026-08-30T10:10:57.316582+00:00"
+    }
+  ]
+}
