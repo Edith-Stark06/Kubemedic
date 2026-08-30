@@ -128,7 +128,7 @@ class TestGuardsRefuseRatherThanCrash:
         deliberately NOT in provider_status(): that builds a listing and must
         never raise, or one broken provider would blank the whole health view.
         """
-        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "gemini")
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "not-a-provider")
         from agent.providers import reset_provider_cache
         reset_provider_cache()
         try:
@@ -139,7 +139,7 @@ class TestGuardsRefuseRatherThanCrash:
 
     def test_status_listing_survives_a_broken_provider(self, monkeypatch):
         """The health view must degrade, not disappear."""
-        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "gemini")
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "not-a-provider")
         from agent.providers import provider_status, reset_provider_cache
         reset_provider_cache()
         try:

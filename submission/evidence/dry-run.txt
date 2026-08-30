@@ -1,0 +1,84 @@
+[claude-code] transport: Host session (Claude Code session) call failed: no response from Claude Code session. The request is at .kubemedic/reasoning-request.md. Ask the host agent to read it and write its JSON analysis to .kubemedic/reasoning-response.json, then run the same command again. Set KUBEMEDIC_HOST_WAIT_SECONDS to wait in-process instead of returning immediately.
+[PROVIDERS] claude-code unavailable; fallback gemini is not configured: GEMINI_API_KEY is unset. Get a key from https://aistudio.google.com/apikey and export it.
+[claude-code] transport: Host session (Claude Code session) call failed: no response from Claude Code session. The request is at .kubemedic/reasoning-request.md. Ask the host agent to read it and write its JSON analysis to .kubemedic/reasoning-response.json, then run the same command again. Set KUBEMEDIC_HOST_WAIT_SECONDS to wait in-process instead of returning immediately.
+[PROVIDERS] claude-code unavailable; fallback gemini is not configured: GEMINI_API_KEY is unset. Get a key from https://aistudio.google.com/apikey and export it.
+====================================================================
+KubeMedic deterministic dry run
+====================================================================
+
+[1] Incident injected into the fixture cluster
+      deployment  = ticket-booking revision 12
+      image       = ticketbooking:1.1  (readiness probe fails)
+      old pods still serving, so the rollout is stalled, not down
+
+[2] Tickets created
+      TKT-101  [high]  Rollout stalled on ticket-booking
+      TKT-102  [high]  Pod not ready
+      TKT-103  [medium]  Checkout errors reported
+
+[3] MCP evidence collected
+      tools used  = ['get_application_health', 'get_events', 'get_pods', 'get_recent_changes', 'get_workload_status', 'list_tickets']
+      pods        = 2, events = 1, revisions = 2
+
+[4] Correlation: many tickets, one incident
+      incident    = INC-20260830T123409-001
+      members     = ['TKT-101', 'TKT-102', 'TKT-103']
+      excluded    = none
+        - TKT-101 references ticket-booking
+        - TKT-101 created within incident window (2026-08-30T12:31:09.473387+00:00)
+        - TKT-102 references ticket-booking
+
+[5] AI analysis
+      provider    = host UNAVAILABLE: Host session (Claude Code session) call failed: no response from Claude Code session. Th
+      using a SCRIPTED analysis so the lifecycle is still demonstrable.
+      this is fixture reasoning, not a model. The record says so.
+      root cause  = Undetermined; the failing pod may be transient.
+      confidence  = low
+
+[6] Remediation proposal
+      action      = restart_deployment -> ticket-booking
+      state       = PENDING_APPROVAL
+
+[7] Human final review required
+      non-interactive: scripting a rejection with feedback
+
+[8] Human feedback received and persisted
+      state       = FEEDBACK_RECORDED
+      feedback    = Do not restart the service. The deployment changed immediately bef
+      cluster     = revision 12, UNCHANGED
+
+[9] Revised analysis, with the feedback in context
+      provider    = host UNAVAILABLE: Host session (Claude Code session) call failed: no response from Claude Code session. Th
+      using a SCRIPTED analysis so the lifecycle is still demonstrable.
+      this is fixture reasoning, not a model. The record says so.
+      was         = restart_deployment
+      now         = rollback_deployment {'to_revision': 11}
+
+[10] Approval received
+      state       = APPROVED
+
+[11] Remediation executed
+      success     = True
+      cluster said= {"action": "rollback_deployment", "namespace": "opspilot", "deployment": "ticket-booking
+
+[12] Independent verification
+      rollout_healthy    passed=True  ready=True, updated=2, desired=2
+      health_endpoint    passed=True  status_code=200, healthy=True
+      outcome     = PASS
+
+[13] Incident closed
+      final state = RESOLVED
+      record      = C:\Users\shivraj\AppData\Local\Temp\dryrun\INC-20260830T123409-001.json
+
+====================================================================
+  incident ID    = INC-20260830T123409-001
+  ticket IDs     = ['TKT-101', 'TKT-102', 'TKT-103']
+  AI provider    = scripted-fixture
+  MCP tools used = ['get_application_health', 'get_events', 'get_pods', 'get_recent_changes', 'get_workload_status', 'list_tickets']
+  cluster calls  = 3
+  final status   = RESOLVED
+
+  NOTE: no AI provider was reachable, so the analysis came from
+  the scripted fixture. analysis_source in the record reads
+  'fixture' -- this run does NOT demonstrate live reasoning.
+====================================================================

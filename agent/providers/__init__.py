@@ -68,6 +68,10 @@ def _register() -> None:
         from agent.providers.host import HostSessionProvider
         return HostSessionProvider()
 
+    def gemini() -> BaseProvider:
+        from agent.providers.gemini import GeminiProvider
+        return GeminiProvider()
+
     _FACTORIES.update({
         "ibm-bob": ibm_bob,
         "bob": ibm_bob,
@@ -77,19 +81,20 @@ def _register() -> None:
         "manual": manual,
         "host": host,
         "ide": host,             # convenience alias
+        "gemini": gemini,
     })
 
 
 def provider_names() -> list[str]:
     _register()
-    return ["ibm-bob", "watsonx", "anthropic", "manual", "host"]
+    return ["ibm-bob", "watsonx", "anthropic", "gemini", "manual", "host"]
 
 
 # Tried in order when the provider is `auto`. The IBM engines come first
 # because this is an IBM Bob project; `host` is last because it always
 # succeeds -- it needs no credential, only somebody to answer -- so anything
 # after it would be unreachable.
-AUTO_ORDER = ("ibm-bob", "watsonx", "anthropic", "manual", "host")
+AUTO_ORDER = ("ibm-bob", "watsonx", "anthropic", "gemini", "manual", "host")
 
 
 def resolve_auto() -> str:
@@ -204,6 +209,94 @@ def provider_status() -> dict[str, Any]:
     }
 
 
+def _env(name: str, default: str = "") -> str:
+    return (os.getenv(name) or default).strip().lower()
+
+
+def fallback_enabled() -> bool:
+    return _env("AI_FALLBACK_ENABLED", "true") not in ("false", "0", "no")
+
+
+def primary_name() -> str:
+    """
+    The engine that answers first.
+
+    AI_PRIMARY_PROVIDER wins; otherwise the KUBEMEDIC_ name, for continuity
+    with the existing configuration. `auto` is resolved to a concrete name so
+    health output and audit records never say "auto" -- a reader needs to know
+    which engine actually answered.
+    """
+    name = _env("AI_PRIMARY_PROVIDER") or configured_provider_name()
+    return resolve_auto() if name == "auto" else name
+
+
+def fallback_name() -> str:
+    return _env("AI_FALLBACK_PROVIDER", "gemini")
+
+
+def analyze_with_fallback(
+    evidence: dict[str, Any],
+    tickets: list[dict[str, Any]],
+    feedback: list[str] | None = None,
+) -> "ProviderResult":
+    """
+    Try the primary engine; on failure fall to the configured fallback.
+
+    Two rules this deliberately follows.
+
+    A failure is never swallowed. The reason the primary could not answer is
+    logged and carried into the returned result, so an audit record shows that
+    IBM was tried and why it did not answer -- not merely that Gemini spoke.
+
+    And a failure is never retried in place. An invalid credential is invalid
+    on the second attempt too; retrying it turns one clear 401 into a retry
+    storm against someone else's service.
+    """
+    primary = get_provider(primary_name())
+    result = primary.analyze(evidence, tickets, feedback)
+    if result.ok:
+        return result
+
+    if not fallback_enabled():
+        log.warning(
+            "[PROVIDERS] %s unavailable and AI_FALLBACK_ENABLED is false", primary.id
+        )
+        return result
+
+    secondary_name = fallback_name()
+    if secondary_name in (primary.id, primary_name()):
+        return result                       # nothing to fall back to
+
+    try:
+        secondary = get_provider(secondary_name)
+    except SystemExit:
+        log.error("[PROVIDERS] fallback %r is not a known provider", secondary_name)
+        return result
+
+    configured, why = secondary.is_configured()
+    if not configured:
+        log.warning(
+            "[PROVIDERS] %s unavailable; fallback %s is not configured: %s",
+            primary.id, secondary.id, why,
+        )
+        return result
+
+    # Safe by construction: the message names the provider and the failure
+    # class, never a credential -- `result.error` is built from status codes
+    # and provider names, and `invocation` excludes the prompt and the key.
+    log.warning(
+        "[PROVIDERS] %s unavailable: %s. Falling back to %s because "
+        "AI_FALLBACK_ENABLED=true.",
+        primary.id, result.error, secondary.id,
+    )
+    fallback_result = secondary.analyze(evidence, tickets, feedback)
+    fallback_result.invocation = [
+        *fallback_result.invocation,
+        f"fallback-from={primary.id}",
+    ]
+    return fallback_result
+
+
 __all__ = [
     "BaseProvider",
     "BobResult",
@@ -216,5 +309,9 @@ __all__ = [
     "provider_status",
     "reset_provider_cache",
     "resolve_auto",
+    "analyze_with_fallback",
+    "fallback_enabled",
+    "fallback_name",
+    "primary_name",
     "unavailable_analysis",
 ]

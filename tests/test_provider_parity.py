@@ -122,7 +122,7 @@ class TestRegistry:
         Never silently fall back. A misspelled name must not leave the system
         looking configured while serving a different engine.
         """
-        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "gemini")
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "not-a-provider")
         with pytest.raises(SystemExit, match="Unknown reasoning provider"):
             get_provider()
 

@@ -11,6 +11,7 @@ from typing import Any
 
 from agent.providers import (
     ProviderResult as BobResult,
+    analyze_with_fallback,
     get_provider,
     unavailable_analysis,
 )
@@ -25,7 +26,7 @@ def bob_analyze(evidence, tickets, feedback=None):
     KUBEMEDIC_REASONING_PROVIDER; nothing else in the pipeline knows or
     cares which engine answered.
     """
-    return get_provider().analyze(evidence, tickets, feedback=feedback)
+    return analyze_with_fallback(evidence, tickets, feedback)
 from agent.models import (
     BobAnalysis,
     EvidenceSnapshot,

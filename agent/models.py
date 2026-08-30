@@ -106,6 +106,11 @@ class BobAnalysis(BaseModel):
         # Reasoning done by the agentic IDE hosting the workspace. Stamped
         # honestly: the Bob IDE reports ibm-bob because it genuinely is Bob.
         "claude-code", "antigravity", "host",
+        # Scripted fixture reasoning used by scripts/dry_run.py when no engine
+        # is reachable. Deliberately its own value: a record reading "fixture"
+        # cannot be mistaken for a model having reasoned, and a judge reading
+        # one knows exactly what they are looking at.
+        "fixture",
         "unavailable",
     ] = "ibm-bob"
     status: str | None = None                  # "evidence_unavailable" or absent

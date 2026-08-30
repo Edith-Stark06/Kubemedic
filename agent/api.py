@@ -423,6 +423,54 @@ def revise_incident_alias(incident_id: str) -> IncidentSummary:
     return revise_incident(incident_id)
 
 
+@app.get("/health/ai")
+def health_ai() -> dict[str, Any]:
+    """
+    Which engine will answer, and why.
+
+    Never exposes a credential -- only whether one is present. Deliberately
+    does not probe the network: a health endpoint that calls a model API turns
+    a slow third party into a red dashboard.
+    """
+    from agent.providers import (
+        fallback_enabled,
+        fallback_name,
+        get_provider,
+        primary_name,
+    )
+
+    def status_of(name: str) -> tuple[str, str]:
+        try:
+            configured, detail = get_provider(name).is_configured()
+        except SystemExit:
+            return "unknown_provider", f"{name} is not a known provider"
+        except Exception as exc:
+            return "error", str(exc)
+        return ("available" if configured else "not_configured"), detail
+
+    primary, secondary = primary_name(), fallback_name()
+    primary_status, primary_detail = status_of(primary)
+    fallback_status, fallback_detail = status_of(secondary)
+
+    if primary_status == "available":
+        active = primary
+    elif fallback_enabled() and fallback_status == "available":
+        active = secondary
+    else:
+        active = None
+
+    return {
+        "primary_provider": primary,
+        "primary_status": primary_status,
+        "primary_detail": primary_detail,
+        "fallback_provider": secondary,
+        "fallback_status": fallback_status,
+        "fallback_detail": fallback_detail,
+        "fallback_enabled": fallback_enabled(),
+        "active_provider": active,
+    }
+
+
 @app.get("/api/provider")
 def provider() -> dict[str, Any]:
     """
