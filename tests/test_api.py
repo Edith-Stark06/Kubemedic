@@ -389,3 +389,58 @@ class TestTickets:
     def test_tickets_come_from_the_store(self, client):
         body = client.get("/api/tickets").json()
         assert body[0]["id"] == "TKT-1"
+
+
+class TestEngineSwitch:
+    """
+    The console can switch reasoning engines at runtime, so a demo can show
+    IBM when the service is active and Gemini when it is not.
+
+    The property that matters: it switches the engine, it never relabels one
+    as another. A run reports the model that actually reasoned.
+    """
+
+    def test_switching_changes_the_active_engine(self, client):
+        assert client.post("/api/provider/select",
+                           json={"provider": "gemini"}).json()["active_provider"] == "gemini"
+        assert client.post("/api/provider/select",
+                           json={"provider": "watsonx"}).json()["active_provider"] == "watsonx"
+
+    def test_selecting_ibm_is_allowed_even_when_it_cannot_answer(self, client, monkeypatch):
+        """
+        The switch must not refuse IBM just because it is unreachable -- that
+        is the case you most want to be able to demonstrate honestly.
+        """
+        monkeypatch.delenv("KUBEMEDIC_BOB_API_KEY", raising=False)
+        monkeypatch.delenv("KUBEMEDIC_BOB_AGENT_ID", raising=False)
+        body = client.post("/api/provider/select", json={"provider": "ibm-bob"}).json()
+        assert body["active_provider"] == "ibm-bob"
+        assert body["configured"] is False
+        assert "unset" in body["detail"]
+
+    def test_unknown_engine_is_refused(self, client):
+        r = client.post("/api/provider/select", json={"provider": "not-an-engine"})
+        assert r.status_code == 400
+        assert r.json()["detail"]["error"] == "unknown_provider"
+
+    def test_health_reports_the_engine_that_was_selected(self, client):
+        client.post("/api/provider/select", json={"provider": "gemini"})
+        assert client.get("/health/ai").json()["primary_provider"] == "gemini"
+
+    def test_no_engine_is_ever_reported_under_another_name(self, client, monkeypatch):
+        """
+        Regression guard. A change once mapped gemini -> watsonx for display,
+        so the API and every screenshot would have credited IBM for another
+        model's output. In a contest judged on IBM technology usage that is a
+        false claim, and the audit record contradicts it anyway.
+        """
+        monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")
+        client.post("/api/provider/select", json={"provider": "gemini"})
+        health = client.get("/health/ai").json()
+        assert health["primary_provider"] == "gemini", "engine reported under another name"
+
+        incident_id = _create(client)
+        full = client.get(f"/api/incidents/{incident_id}").json()
+        summary = client.get("/api/incidents").json()[0]
+        # Whatever answered, the summary must agree with the record.
+        assert summary["analysis_source"] == full["analysis"]["analysis_source"]

@@ -63,7 +63,19 @@
 
   <section class="card col-4">
     <div class="head"><h2>Reasoning engine</h2></div>
-    <div class="body" id="providers"><div class="empty">loading…</div></div>
+    <div class="body">
+      <label class="field">Switch engine</label>
+      <div class="actions" style="margin-top:0">
+        <button id="btn-eng-watsonx">IBM watsonx</button>
+        <button id="btn-eng-bob">IBM Bob</button>
+        <button id="btn-eng-gemini">Gemini</button>
+      </div>
+      <div id="providers" style="margin-top:14px"><div class="empty">loading…</div></div>
+      <div class="note">
+        This switches the engine, it does not relabel one as another. An audit
+        record always names the model that actually reasoned.
+      </div>
+    </div>
   </section>
 
   <section class="card col-6">

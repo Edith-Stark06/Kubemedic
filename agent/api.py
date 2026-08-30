@@ -627,6 +627,7 @@ def health_ai() -> dict[str, Any]:
     else:
         active = None
 
+
     return {
         "primary_provider": primary,
         "primary_status": primary_status,
@@ -636,6 +637,62 @@ def health_ai() -> dict[str, Any]:
         "fallback_detail": fallback_detail,
         "fallback_enabled": fallback_enabled(),
         "active_provider": active,
+    }
+
+
+class SelectProviderRequest(BaseModel):
+    """Which reasoning engine should answer from now on."""
+    provider: str
+
+
+@app.post("/api/provider/select")
+def select_provider(body: SelectProviderRequest) -> dict[str, Any]:
+    """
+    Switch the reasoning engine at runtime.
+
+    This genuinely changes which engine answers -- it does not relabel one as
+    another. If watsonx is selected and unreachable, incidents will say so and
+    produce no plan; the console will not quietly show IBM branding over a
+    different model's output. An audit record always names the engine that
+    actually reasoned.
+
+    IBM providers are flagged out of the default order because neither can
+    currently answer. Selecting one explicitly is always allowed -- that is the
+    point of the switch, and it is how you demonstrate IBM the moment the
+    service is active.
+    """
+    from agent.providers import get_provider, provider_names, reset_provider_cache
+
+    name = body.provider.strip().lower()
+    if name not in provider_names() and name not in ("auto", "bob", "claude", "ide"):
+        raise HTTPException(
+            400,
+            detail={
+                "error": "unknown_provider",
+                "message": f"{name!r} is not a known engine. "
+                           f"Valid: {', '.join(provider_names())}, auto.",
+            },
+        )
+
+    # Persist for this process. Providers read configuration at construction,
+    # so the cache is cleared to force a fresh one.
+    os.environ["AI_PRIMARY_PROVIDER"] = name
+    os.environ["KUBEMEDIC_REASONING_PROVIDER"] = name
+    if name in ("ibm-bob", "watsonx", "bob"):
+        # Selecting IBM explicitly also lifts the flag, so `auto` would find it
+        # too -- otherwise the switch would appear to work and silently not.
+        os.environ["KUBEMEDIC_IBM_ENABLED"] = "true"
+    reset_provider_cache()
+
+    provider = get_provider(name if name != "auto" else None)
+    configured, detail = provider.is_configured()
+    log.info("[PROVIDERS] engine switched to %s (configured=%s)", provider.id, configured)
+    return {
+        "selected": name,
+        "active_provider": provider.id,
+        "display_name": provider.display_name,
+        "configured": configured,
+        "detail": detail,
     }
 
 

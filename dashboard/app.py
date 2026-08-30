@@ -55,7 +55,7 @@ _STATE_LABELS: dict[str, str] = {
     "EVIDENCE_COLLECTED": "Evidence Collected",
     "EVIDENCE_FAILED": "Evidence Failed",
     "ANALYSED": "Analysed",
-    "BOB_UNAVAILABLE": "IBM Bob Unavailable",
+    "BOB_UNAVAILABLE": "Analysis Unavailable",
     "PENDING_APPROVAL": "Awaiting Review",
     "APPROVED": "Approved",
     "REJECTED": "Rejected",

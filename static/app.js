@@ -52,7 +52,10 @@ const STATE_CLASS = {
   ANALYSED: "info", EVIDENCE_COLLECTED: "grey",
   REJECTED: "bad", VERIFICATION_FAILED: "bad",
 };
-const badge = (s, cls) => `<span class="badge ${cls ?? STATE_CLASS[s] ?? "grey"}">${esc(s)}</span>`;
+const STATE_LABEL = {
+  BOB_UNAVAILABLE: "ANALYSIS_UNAVAILABLE",
+};
+const badge = (s, cls) => `<span class="badge ${cls ?? STATE_CLASS[s] ?? "grey"}">${esc(STATE_LABEL[s] || s)}</span>`;
 
 // ------------------------------------------------------------- lifecycle
 
@@ -78,7 +81,7 @@ function renderSteps(incident) {
     return `<div class="step ${cls}"><span class="n">${n}</span>${esc(label)}</div>`;
   }).join("");
   $("stage-note").textContent = incident
-    ? `${incident.incident_id} — ${incident.state}`
+    ? `${incident.incident_id} — ${STATE_LABEL[incident.state] || incident.state}`
     : "not started";
 }
 
@@ -149,7 +152,7 @@ async function loadProviders() {
       kv("active", d.active_provider ? badge(d.active_provider, "info") : badge("none", "bad")) +
       (d.active_provider ? "" :
         `<div class="note warn">No engine is reachable. Incidents will report
-         <strong>BOB_UNAVAILABLE</strong> and no plan will be built — the system
+         <strong>ANALYSIS_UNAVAILABLE</strong> and no plan will be built — the system
          reports the outage rather than inventing a diagnosis.</div>`);
   } catch (e) {
     $("providers").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
@@ -203,7 +206,7 @@ async function showIncident(id) {
   $("detail-card").hidden = false;
   $("d-id").textContent = id;
   $("d-state").className = `badge ${STATE_CLASS[d.state] || "grey"}`;
-  $("d-state").textContent = d.state;
+  $("d-state").textContent = STATE_LABEL[d.state] || d.state;
 
   const c = d.correlation;
   $("d-correlation").innerHTML = c ? `
@@ -311,6 +314,28 @@ function busy(btn, label) {
 }
 
 $("btn-refresh").addEventListener("click", refreshAll);
+
+// Engine switch. Selecting IBM when it cannot answer is allowed on purpose --
+// the console then shows it as unavailable rather than quietly using another
+// model under an IBM label.
+async function selectEngine(name, btn) {
+  const done = busy(btn, "switching…");
+  try {
+    const d = await api("/api/provider/select", {
+      method: "POST", body: JSON.stringify({ provider: name }),
+    });
+    toast(
+      d.configured
+        ? `Engine: ${d.display_name} — ready`
+        : `Engine: ${d.display_name} — NOT configured. ${d.detail}`,
+      d.configured ? "ok" : "bad");
+    await refreshAll();
+  } catch (e) { toast(e.message, "bad"); } finally { done(); }
+}
+
+$("btn-eng-watsonx").addEventListener("click", (e) => selectEngine("watsonx", e.target));
+$("btn-eng-bob").addEventListener("click", (e) => selectEngine("ibm-bob", e.target));
+$("btn-eng-gemini").addEventListener("click", (e) => selectEngine("gemini", e.target));
 
 $("btn-demo-start").addEventListener("click", async () => {
   const done = busy($("btn-demo-start"), "resetting…");
