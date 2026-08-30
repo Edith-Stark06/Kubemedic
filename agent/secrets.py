@@ -34,7 +34,22 @@ class SecretProvider(Protocol):
 
 
 class EnvSecrets:
-    """Process environment. The default, and what a developer expects."""
+    """
+    Process environment. The default, and what a developer expects.
+
+    If a `.env` file exists in the working directory (or any parent), it is
+    loaded once with python-dotenv so that `python -m agent.api` picks up
+    credentials without requiring the caller to pre-export them. Variables
+    already in the environment take precedence (dotenv's override=False default).
+    """
+
+    def __init__(self) -> None:
+        try:
+            from dotenv import load_dotenv
+            # Walk up to find .env; dotenv does this by default with find_dotenv.
+            load_dotenv(override=False, verbose=False)
+        except ImportError:
+            pass  # python-dotenv is optional; env vars must be pre-exported
 
     def get(self, name: str) -> str | None:
         value = os.getenv(name)

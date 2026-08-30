@@ -11,12 +11,28 @@ programmatic path is the cloud RemoteAgent REST API:
     POST {base}/api/v1/chats                 -> {id}
     POST {base}/api/v1/chats/{id}/execute    -> result
 
-UNVERIFIED
-----------
-The default base is https://cloud.manufact.com, read from the IDE extension's
-RemoteAgent class. Nothing in this repository establishes it as the sanctioned
-IBM Bob API for the contest. Confirm against IBM Bob documentation before
-depending on it.
+ENDPOINT: STILL UNRESOLVED -- what we know empirically (2026-08-30)
+-------------------------------------------------------------------
+Tested with a real Inference-scoped key from the Bob console:
+
+  https://cloud.manufact.com   Cloudflare blocks urllib's default user-agent
+                               with a 403 "error code: 1010". With a browser
+                               User-Agent it reaches the API and returns a
+                               genuine 401 Unauthorized on every path tried
+                               (/api/v1/chats, /agents, /me, /models,
+                               /chat/completions), with both x-api-key and
+                               Authorization: Bearer.
+
+  https://bob.ibm.com          Returns 404 HTML for every API path. It is the
+                               web console, not the API host.
+
+An Inference-scoped key is "scoped to a specific instance", so the base URL is
+most likely instance-specific and neither of the above. Do not assert an
+endpoint here without a 2xx to show for it -- a wrong default sends an operator
+chasing an auth problem that is really a routing one.
+
+Until it is known, use the `host` provider: IBM Bob reasons interactively in
+the workspace and the analysis is stamped ibm-bob, with no credentials at all.
 
 There is a second, credential-free path: run Bob interactively in the workspace
 (it launches the read-only MCP evidence server itself) and ingest the JSON with

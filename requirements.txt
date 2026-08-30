@@ -20,3 +20,7 @@ mcp>=1.20,<2
 fastapi>=0.110,<1
 uvicorn[standard]>=0.27,<1
 jinja2>=3.1,<4
+
+# Loads .env into the process environment at startup (agent/secrets.py:EnvSecrets).
+# Already installed in the contest environment; declared here so a fresh clone works.
+python-dotenv>=1.0,<2

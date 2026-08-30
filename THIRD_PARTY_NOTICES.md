@@ -14,6 +14,7 @@ stated license; no modification has been made to any third-party code.
 | `uvicorn` | >=0.27,<1 | BSD 3-Clause | https://github.com/encode/uvicorn |
 | `jinja2` | >=3.1,<4 | BSD 3-Clause | https://github.com/pallets/jinja |
 | `httpx` | >=0.27 | BSD 3-Clause | https://github.com/encode/httpx |
+| `python-dotenv` | >=1.0,<2 | BSD 3-Clause | https://github.com/theskumar/python-dotenv |
 
 ## Development dependencies
 
