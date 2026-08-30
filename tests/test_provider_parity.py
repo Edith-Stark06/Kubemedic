@@ -97,9 +97,20 @@ class TestRegistry:
         reset_provider_cache()
         assert get_provider("claude").id == "anthropic"
 
-    def test_default_is_ibm_bob(self, monkeypatch):
-        """KubeMedic is an IBM Bob project. The default must say so."""
+    def test_ibm_bob_is_preferred_when_configured(self, monkeypatch):
+        """
+        KubeMedic is an IBM Bob project, so the IBM engines come first in the
+        `auto` order. The default is now `auto` rather than `ibm-bob` outright,
+        so that a clone with no credentials still has a working reasoning path
+        -- but whenever Bob is configured, Bob wins.
+        """
         monkeypatch.delenv("KUBEMEDIC_REASONING_PROVIDER", raising=False)
+        monkeypatch.setenv("KUBEMEDIC_BOB_API_KEY", "k")
+        monkeypatch.setenv("KUBEMEDIC_BOB_AGENT_ID", "a")
+        assert get_provider().id == "ibm-bob"
+
+    def test_explicit_ibm_bob_is_honoured(self, monkeypatch):
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "ibm-bob")
         assert get_provider().id == "ibm-bob"
 
     def test_env_selects_the_provider(self, monkeypatch):
@@ -119,7 +130,7 @@ class TestRegistry:
         status = provider_status()
         listed = {entry["provider"] for entry in status["providers"]}
         assert {"watsonx", "anthropic"} <= listed
-        assert status["default"] == "ibm-bob"
+        assert status["default"] == "auto"
         assert "secrets_backend" in status
 
 

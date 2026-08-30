@@ -35,7 +35,9 @@ from agent.providers.prompt import build_prompt
 
 log = logging.getLogger("kubemedic.providers")
 
-DEFAULT_PROVIDER = "ibm-bob"
+# `auto` picks the first configured engine, ending at the host IDE session --
+# so a fresh clone with no credentials still has a working reasoning path.
+DEFAULT_PROVIDER = "auto"
 
 # Imported lazily so a missing optional dependency in one provider cannot stop
 # the process starting with a different one selected.
@@ -62,6 +64,10 @@ def _register() -> None:
         from agent.providers.manual import ManualProvider
         return ManualProvider()
 
+    def host() -> BaseProvider:
+        from agent.providers.host import HostSessionProvider
+        return HostSessionProvider()
+
     _FACTORIES.update({
         "ibm-bob": ibm_bob,
         "bob": ibm_bob,
@@ -69,12 +75,39 @@ def _register() -> None:
         "anthropic": anthropic,
         "claude": anthropic,
         "manual": manual,
+        "host": host,
+        "ide": host,             # convenience alias
     })
 
 
 def provider_names() -> list[str]:
     _register()
-    return ["ibm-bob", "watsonx", "anthropic", "manual"]
+    return ["ibm-bob", "watsonx", "anthropic", "manual", "host"]
+
+
+# Tried in order when the provider is `auto`. The IBM engines come first
+# because this is an IBM Bob project; `host` is last because it always
+# succeeds -- it needs no credential, only somebody to answer -- so anything
+# after it would be unreachable.
+AUTO_ORDER = ("ibm-bob", "watsonx", "anthropic", "manual", "host")
+
+
+def resolve_auto() -> str:
+    """
+    First configured provider wins.
+
+    Without this, a machine with no API keys has no working reasoning path at
+    all, and the honest fallback -- asking the agentic IDE that is already
+    sitting in the workspace -- is exactly what an operator would do by hand.
+    """
+    _register()
+    for name in AUTO_ORDER:
+        try:
+            if _FACTORIES[name]().is_configured()[0]:
+                return name
+        except Exception:                # a broken provider is simply skipped
+            continue
+    return "host"
 
 
 def configured_provider_name() -> str:
@@ -96,6 +129,8 @@ def get_provider(name: str | None = None) -> BaseProvider:
     _register()
 
     requested = (name or configured_provider_name()).strip().lower()
+    if requested == "auto":
+        requested = resolve_auto()
     if requested not in _FACTORIES:
         raise SystemExit(
             f"Unknown reasoning provider {requested!r}. "
@@ -180,5 +215,6 @@ __all__ = [
     "provider_names",
     "provider_status",
     "reset_provider_cache",
+    "resolve_auto",
     "unavailable_analysis",
 ]

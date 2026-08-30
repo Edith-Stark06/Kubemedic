@@ -43,3 +43,8 @@ records/*.json
 # working input, not source -- and it should never be mistaken for a
 # committed claim about what Bob returned.
 bob-analysis.json
+
+# Host-session hand-off. Machine-local working files: the prompt written for
+# the IDE agent and the answer it wrote back. Not source, and never a
+# committed claim about what a model returned.
+.kubemedic/

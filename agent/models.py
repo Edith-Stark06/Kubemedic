@@ -102,7 +102,11 @@ class BobAnalysis(BaseModel):
     # matching change is in
     # .bob/skills/incident-correlation/references/evidence-schema.md.
     analysis_source: Literal[
-        "ibm-bob", "watsonx", "anthropic", "unavailable"
+        "ibm-bob", "watsonx", "anthropic",
+        # Reasoning done by the agentic IDE hosting the workspace. Stamped
+        # honestly: the Bob IDE reports ibm-bob because it genuinely is Bob.
+        "claude-code", "antigravity", "host",
+        "unavailable",
     ] = "ibm-bob"
     status: str | None = None                  # "evidence_unavailable" or absent
 
