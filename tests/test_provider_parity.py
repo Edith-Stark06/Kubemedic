@@ -105,6 +105,10 @@ class TestRegistry:
         -- but whenever Bob is configured, Bob wins.
         """
         monkeypatch.delenv("KUBEMEDIC_REASONING_PROVIDER", raising=False)
+        # IBM is flagged out of the auto order by default -- neither engine can
+        # currently answer. The flag is what puts them back, and this asserts
+        # the preference survives that switch.
+        monkeypatch.setenv("KUBEMEDIC_IBM_ENABLED", "true")
         monkeypatch.setenv("KUBEMEDIC_BOB_API_KEY", "k")
         monkeypatch.setenv("KUBEMEDIC_BOB_AGENT_ID", "a")
         assert get_provider().id == "ibm-bob"
@@ -383,3 +387,51 @@ class TestExplicitNullsFromRealModels:
             result = provider.analyze(EVIDENCE, TICKETS)
             assert result.ok, provider.id
             assert BobAnalysis.from_raw(result.analysis).action_parameters == {}
+
+
+class TestTimeoutRetry:
+    """
+    A live Gemini call timed out on a revision and the whole loop was lost. A
+    timeout is transient, so it earns exactly one retry -- unlike an auth
+    failure, which is invalid on the second attempt too and would turn one
+    clear 401 into a retry storm.
+    """
+
+    def test_a_timeout_is_retried_once_and_can_succeed(self, monkeypatch):
+        calls = {"n": 0}
+
+        def flaky(self, prompt):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise TimeoutError("read timed out")
+            return json.dumps(VALID_ANALYSIS)
+
+        monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")
+        monkeypatch.setattr(AnthropicProvider, "_invoke", flaky)
+        result = AnthropicProvider().analyze(EVIDENCE, TICKETS)
+        assert result.ok
+        assert calls["n"] == 2
+
+    def test_two_timeouts_give_up(self, monkeypatch):
+        def always(self, prompt):
+            raise TimeoutError("read timed out")
+
+        monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")
+        monkeypatch.setattr(AnthropicProvider, "_invoke", always)
+        result = AnthropicProvider().analyze(EVIDENCE, TICKETS)
+        assert not result.ok
+        assert "timed out twice" in result.error
+
+    def test_an_auth_failure_is_not_retried(self, monkeypatch):
+        """The distinction that keeps this from being a retry storm."""
+        calls = {"n": 0}
+
+        def unauthorised(self, prompt):
+            calls["n"] += 1
+            raise RuntimeError("rejected the API key (HTTP 401)")
+
+        monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")
+        monkeypatch.setattr(AnthropicProvider, "_invoke", unauthorised)
+        result = AnthropicProvider().analyze(EVIDENCE, TICKETS)
+        assert not result.ok
+        assert calls["n"] == 1, "an auth failure must not be retried"

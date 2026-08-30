@@ -55,7 +55,7 @@ class GeminiProvider(BaseProvider):
             or os.getenv("GEMINI_MODEL")
             or DEFAULT_MODEL
         )
-        self.timeout = int(os.getenv("KUBEMEDIC_GEMINI_TIMEOUT_SECONDS", "180"))
+        self.timeout = int(os.getenv("KUBEMEDIC_GEMINI_TIMEOUT_SECONDS", "240"))
         self.max_tokens = int(os.getenv("KUBEMEDIC_GEMINI_MAX_TOKENS", "4000"))
 
     def is_configured(self) -> tuple[bool, str]:

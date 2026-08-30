@@ -94,7 +94,37 @@ def provider_names() -> list[str]:
 # because this is an IBM Bob project; `host` is last because it always
 # succeeds -- it needs no credential, only somebody to answer -- so anything
 # after it would be unreachable.
-AUTO_ORDER = ("ibm-bob", "watsonx", "anthropic", "gemini", "manual", "host")
+# FLAGGED OFF: ibm-bob and watsonx.
+#
+# Neither can currently answer, and leaving them first in the order meant every
+# incident spent a round trip failing before anything reasoned.
+#
+#   watsonx  IAM auth and the deployment list both work, but inference returns
+#            403 invalid_instance_status_error -- the WML instance behind the
+#            BobFlow deployment is Inactive and cannot be reactivated on this
+#            account.
+#   ibm-bob  A real Inference-scoped key returns 401 on every path of
+#            cloud.manufact.com, and bob.ibm.com serves 404 HTML (it is the web
+#            console, not the API). The instance-specific base URL is unknown.
+#
+# Set KUBEMEDIC_IBM_ENABLED=true to put them back in the order the moment
+# either works -- nothing else needs to change. Both providers are still
+# registered, still tested, and still selectable explicitly by name.
+IBM_PROVIDERS = ("ibm-bob", "watsonx")
+_AUTO_ORDER_FULL = ("ibm-bob", "watsonx", "gemini", "anthropic", "manual", "host")
+
+
+def ibm_enabled() -> bool:
+    return _env("KUBEMEDIC_IBM_ENABLED", "false") in ("true", "1", "yes")
+
+
+def auto_order() -> tuple[str, ...]:
+    if ibm_enabled():
+        return _AUTO_ORDER_FULL
+    return tuple(n for n in _AUTO_ORDER_FULL if n not in IBM_PROVIDERS)
+
+
+AUTO_ORDER = _AUTO_ORDER_FULL
 
 
 def resolve_auto() -> str:
@@ -106,7 +136,7 @@ def resolve_auto() -> str:
     sitting in the workspace -- is exactly what an operator would do by hand.
     """
     _register()
-    for name in AUTO_ORDER:
+    for name in auto_order():
         try:
             if _FACTORIES[name]().is_configured()[0]:
                 return name
@@ -309,6 +339,8 @@ __all__ = [
     "provider_status",
     "reset_provider_cache",
     "resolve_auto",
+    "auto_order",
+    "ibm_enabled",
     "analyze_with_fallback",
     "fallback_enabled",
     "fallback_name",

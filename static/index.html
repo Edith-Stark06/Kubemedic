@@ -35,14 +35,23 @@
     <div class="head"><h2>Demo</h2></div>
     <div class="body">
       <div id="demo-state"><div class="empty">checking…</div></div>
-      <div class="actions">
-        <button id="btn-demo-start" class="primary">Start dry run</button>
-        <button id="btn-demo-stop">Use live cluster</button>
+      <label class="field" style="margin-top:14px">Live cluster</label>
+      <div class="actions" style="margin-top:0">
+        <button id="btn-live-inject" class="danger">Break ticket-booking</button>
+        <button id="btn-live-watch">Run watcher</button>
+        <button id="btn-live-reset">Reset healthy</button>
       </div>
-      <div class="note">
-        The dry run uses a deterministic fixture cluster, so no Kubernetes is
-        needed. Correlation, the approval gate, the executor and the verifier
-        are the real ones — only the cluster is simulated.
+      <div class="note warn">
+        Fault injection is presenter tooling, not something the agent can do.
+        It ships <code>ticketbooking:1.1</code> directly, outside the executor —
+        the agent's allowlist stays three actions, so nothing the model reaches
+        can break your cluster.
+      </div>
+
+      <label class="field" style="margin-top:18px">No cluster? Use the fixture</label>
+      <div class="actions" style="margin-top:0">
+        <button id="btn-demo-start">Start dry run</button>
+        <button id="btn-demo-stop">Back to live</button>
       </div>
     </div>
   </section>

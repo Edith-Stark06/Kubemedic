@@ -135,9 +135,21 @@ class BaseProvider:
         try:
             raw = self._invoke(prompt)
         except TimeoutError as exc:
-            return self._fail(
-                "timeout", f"{self.display_name} timed out: {exc}", started
-            )
+            # One retry, for timeouts only. A timeout is transient -- a live
+            # Gemini call timed out on a revision and lost the whole loop --
+            # whereas an invalid credential is invalid on the second attempt
+            # too. Retrying auth failures is how one clear 401 becomes a retry
+            # storm against someone else's service, so this deliberately does
+            # not cover them.
+            log.warning("[%s] timed out, retrying once: %s", self.id, exc)
+            try:
+                raw = self._invoke(prompt)
+            except Exception as retry_exc:
+                return self._fail(
+                    "timeout",
+                    f"{self.display_name} timed out twice: {retry_exc}",
+                    started,
+                )
         except Exception as exc:
             return self._fail(
                 "transport", f"{self.display_name} call failed: {exc}", started

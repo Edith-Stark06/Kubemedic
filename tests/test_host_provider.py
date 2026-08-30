@@ -168,12 +168,18 @@ class TestAutoResolution:
         assert resolve_auto() == "host"
 
     def test_prefers_ibm_bob_when_it_is_configured(self, monkeypatch):
-        """IBM engines come first -- this is an IBM Bob project."""
+        """
+        IBM engines come first when enabled -- this is an IBM Bob project.
+        They are flagged out of the order by default only because neither can
+        currently answer; the preference itself is unchanged.
+        """
+        monkeypatch.setenv("KUBEMEDIC_IBM_ENABLED", "true")
         monkeypatch.setenv("KUBEMEDIC_BOB_API_KEY", "k")
         monkeypatch.setenv("KUBEMEDIC_BOB_AGENT_ID", "a")
         assert resolve_auto() == "ibm-bob"
 
     def test_prefers_watsonx_over_anthropic(self, monkeypatch):
+        monkeypatch.setenv("KUBEMEDIC_IBM_ENABLED", "true")
         monkeypatch.setenv("KUBEMEDIC_WATSONX_API_KEY", "k")
         monkeypatch.setenv("KUBEMEDIC_WATSONX_PROJECT_ID", "p")
         monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")

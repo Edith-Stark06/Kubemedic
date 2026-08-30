@@ -323,6 +323,46 @@ $("btn-demo-start").addEventListener("click", async () => {
   } catch (e) { toast(e.message, "bad"); } finally { done(); }
 });
 
+// Live-cluster orchestration. These call presenter tooling, not the agent.
+$("btn-live-inject").addEventListener("click", async () => {
+  const done = busy($("btn-live-inject"), "shipping bad image…");
+  try {
+    const d = await api("/api/live/inject", { method: "POST" });
+    current = null;
+    $("detail-card").hidden = true;
+    toast(`Shipped ${d.image} — revision ${d.revision}. Give it ~30s, then run the watcher.`, "ok");
+    await refreshAll();
+  } catch (e) { toast(e.message, "bad"); } finally { done(); }
+});
+
+$("btn-live-watch").addEventListener("click", async () => {
+  const done = busy($("btn-live-watch"), "observing…");
+  try {
+    const d = await api("/api/live/watch", { method: "POST" });
+    const filed = (d.created || []).length;
+    // Never a bare zero: "nothing wrong" and "already ticketed" are different
+    // facts, and confusing them has cost real time.
+    toast(filed
+      ? `${filed} ticket(s) filed from ${(d.observed || []).length} anomaly signal(s)`
+      : (d.skipped || []).length
+        ? `Nothing new — already open: ${d.skipped.join(", ")}`
+        : "No anomalies observed — the cluster looks healthy",
+      filed ? "ok" : "");
+    await refreshAll();
+  } catch (e) { toast(e.message, "bad"); } finally { done(); }
+});
+
+$("btn-live-reset").addEventListener("click", async () => {
+  const done = busy($("btn-live-reset"), "restoring…");
+  try {
+    const d = await api("/api/live/reset", { method: "POST" });
+    current = null;
+    $("detail-card").hidden = true;
+    toast(`Restored ${d.image}, ${d.tickets_closed} ticket(s) resolved`, "ok");
+    await refreshAll();
+  } catch (e) { toast(e.message, "bad"); } finally { done(); }
+});
+
 $("btn-demo-stop").addEventListener("click", async () => {
   try {
     await api("/api/demo/stop", { method: "POST" });

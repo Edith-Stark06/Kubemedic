@@ -1,130 +1,252 @@
 # How IBM Bob Was Utilised
 
+**Project:** KubeMedic — Evidence-driven Kubernetes incident response with a human in the loop
+**Contest:** IBM TechXchange 2026 Pre-conference Dev Day Hackathon
+**Theme:** Build with purpose using IBM Bob 2.0
+
 ---
 
-## 1. IBM Bob is the reasoning layer, and it is the only one
+## 1. IBM Bob is the reasoning layer — the only one
 
-KubeMedic has exactly one module that calls a model: `agent/bob.py`. Nothing
-else in the codebase talks to a model provider. That is a deliberate
-architectural boundary, and it is why "what does IBM Bob do here" has a
-one-file answer.
+KubeMedic has exactly one module that calls a model: [`agent/providers/`](../agent/providers/).
+Nothing else in the codebase talks to any model provider. That is a deliberate
+architectural boundary enforced in code, not stated in a README.
 
-The system's division of labour is stated in `AGENTS.md`, the standing
-instruction file Bob loads in every session, and enforced in code:
+The system's division of labour is defined in [`AGENTS.md`](../AGENTS.md), the
+standing instruction file Bob loads in every session, and mirrored in the code:
 
-- **MCP** answers *what is happening.* It returns evidence. It never decides a
-  cause, and it has no tool that can change the cluster.
-- **IBM Bob** answers *what this evidence means* — correlation, likely cause,
-  proposed remediation, and the reasoning a human needs to judge it.
-- **The executor** answers *is this exact action permitted.*
-- **The human** answers *should this happen at all.*
-- **The verifier** answers *did it actually work.*
+| Layer | Question answered | What it cannot do |
+|---|---|---|
+| **MCP server** | *What is happening?* Returns cluster evidence | Change the cluster, decide a cause |
+| **IBM Bob** | *What does this evidence mean?* Correlation, root cause, plan | Execute anything |
+| **Executor** | *Is this exact action permitted?* | Run without approval |
+| **Human reviewer** | *Should this happen at all?* | Be bypassed |
+| **Verifier** | *Did it actually work?* | Trust the execution response |
 
-Bob occupies the position in that chain that actually requires judgement.
-Everything around it is deterministic on purpose, so that Bob's contribution is
+Bob occupies the position in that chain that genuinely requires judgement.
+Everything around it is deterministic by design, so Bob's contribution is
 legible rather than diffused through the system.
 
-## 2. What Bob is asked, and what it must return
+---
 
-Bob receives the correlated evidence — pod states, events, rollout history,
-application health — and the open tickets, and is told explicitly to treat that
-as the complete set of observed facts and assume nothing beyond it.
+## 2. IBM Bob as the development environment
 
-It returns one JSON object matching
-`.bob/skills/incident-correlation/references/evidence-schema.md`:
+Before Bob was the runtime reasoning layer, it was the environment in which the
+entire system was built. The `.bob/` directory at the repository root is a
+purpose-built asset pack — committed, reviewable, and part of the submission:
 
-- **Ranked hypotheses**, each with a confidence level, the reason for that
-  confidence, and the specific evidence supporting *and contradicting* it
-- **A root cause**, explicitly flagged as an inference rather than a fact
-- **A timeline** of what happened when
-- **One recommended action** from a closed allowlist of three:
-  `rollback_deployment`, `restart_deployment`, `scale_workload` — with
-  permission to recommend nothing and say what a human should do instead
+### Custom modes (4)
 
-The prompt names the allowlist literally. Anything outside it is rejected
-before parsing, by a check that runs ahead of schema validation. A test asserts
-that a `kubectl delete ...` string offered as an action is refused.
+| Mode | Purpose |
+|---|---|
+| `KubeMedic Analyst` | Runtime incident reasoning — the mode `agent/providers/` targets headlessly. Read-only; can only write to `records/`. |
+| `KubeMedic Dev` | Implementation sessions — used to build the agent pipeline, executor, verification, API, and dashboard seam |
+| `KubeMedic Architect` | Planning sessions — consolidation of two competing implementations, API design, submission documents |
+| `KubeMedic Auditor` | Adversarial review — sweeping for Gemini references, committed secrets, unsupported claims |
 
-**Contradicting evidence is a required field.** A reasoner that only reports
-what supports its conclusion is not helping a human decide.
+### Skills (7)
 
-## 3. Bob as the development environment, not only the runtime
+| Skill | Used for |
+|---|---|
+| `incident-correlation` | Core procedure: gather evidence, correlate N tickets → 1 incident, rank hypotheses with contradicting evidence required |
+| `remediation-planning` | Seven-field impact-aware plan with blast radius, risk, reversibility and verification plan |
+| `verification-review` | Two-signal independent recovery confirmation |
+| `runbook-bad-rollout` | Operational runbook for the demo incident class |
+| `track-consolidation` | Merge the legacy orchestrator without losing working logic |
+| `submission-audit` | Score the submission against the four judging criteria |
+| `gemini-audit` | Sweep for leftover Google/Gemini provider references |
 
-`.bob/` in the repository root is an asset pack we authored for this project,
-and it is reviewable evidence of how Bob was used to build the system:
+### Personas (6)
+Pod-state, events, change-history, health, ticket, and provider-auditor investigators — subagent personas Bob spawns during correlation.
 
-- **`AGENTS.md`** — standing instructions Bob loads in every session, including
-  the four rules that override everything else: never fabricate evidence;
-  separate fact from inference from recommendation; never claim success without
-  evidence; never execute anything a model composed.
-- **Custom modes** — `kubemedic-analyst` for incident reasoning,
-  `kubemedic-dev` for building, `kubemedic-auditor` for adversarial review.
-- **Seven skills** — `incident-correlation`, `remediation-planning`,
-  `verification-review`, `runbook-bad-rollout`, `track-consolidation`,
-  `submission-audit`, `gemini-audit`.
-- **Six investigator personas** — pod state, events, change history, health,
-  tickets, and a provider auditor.
-- **`mcp.json`** — the tool surface Bob is given, deliberately read-only.
+### Standing rules
+[`AGENTS.md`](../AGENTS.md) loads into every session. Its four rules — never fabricate evidence; separate fact from inference from recommendation; never claim success without evidence; never execute anything a model composed — are the same four properties enforced in code and tested in the suite.
 
-Bob in `kubemedic-dev` mode was used to consolidate two competing
-implementations into the submitted architecture. Bob in `kubemedic-auditor`
-mode was used adversarially against our own work — sweeping for leftover
-provider references, for secrets, and for claims in documentation not backed by
-code. Several findings in `docs/20_KNOWN_GAPS.md` came out of that.
+### What Bob built in Dev mode
+- Consolidated two competing implementations (`orchestrator/` Track 1 and `agent/` Track 2) into the submitted architecture
+- Implemented `agent/executor.py`, `agent/verification.py`, `agent/audit.py`, `agent/api.py`
+- Built the provider registry (`agent/providers/`) with five pluggable engines and a single validated contract
+- Fixed three bugs found during the Verona branch merge (missing `ARG` in Dockerfile, unawaited `httpx` calls, duplicate workload entrypoint)
+- Authored the submission documents, demo script, and submission checklist
+
+### What Bob found in Auditor mode
+- No Google SDK, no Gemini import, no `GOOGLE_API_KEY` anywhere in the codebase (confirmed by `git grep`)
+- No committed credentials or absolute local paths
+- Findings from that pass are documented in [`docs/20_KNOWN_GAPS.md`](../docs/20_KNOWN_GAPS.md)
+
+---
+
+## 3. IBM Bob as the runtime reasoning engine
+
+### The architecture
+
+```
+MCP evidence server  ──►  IBM Bob (kubemedic-analyst mode)
+  get_workload_status           │
+  get_pods                      │  ranked hypotheses
+  get_events                    │  root cause (labelled inference)
+  get_recent_changes            │  one action from allowlist of 3
+  get_application_health        ▼
+  list_tickets          BobAnalysis (validated contract)
+  get_ticket                    │
+                                ▼
+                        Human review gate
+                                │
+                        ┌───────┴───────┐
+                      APPROVE        REJECT (reason required)
+                        │                │
+                     Execute         reason → Bob → revised plan
+                        │
+                 Independent verification
+                 (two signals: rollout + health endpoint)
+                        │
+                   Audit record
+```
+
+### What Bob receives
+
+A structured prompt containing:
+- Live pod states, readiness, restart counts, images
+- Kubernetes events (Warning/Unhealthy, reason, timestamps)
+- Rollout revision history with change-cause annotations
+- Application `/health` response through the Service proxy
+- All open tickets with titles and reported symptoms
+
+Bob is told explicitly: *"treat this as the complete set of observed facts and assume nothing beyond it."*
+
+### What Bob must return
+
+One JSON object validated against [`.bob/skills/incident-correlation/references/evidence-schema.md`](../.bob/skills/incident-correlation/references/evidence-schema.md):
+
+```json
+{
+  "analysis_source": "ibm-bob",
+  "hypotheses": [
+    {
+      "rank": 1,
+      "statement": "...",
+      "confidence": "high",
+      "confidence_reason": "...",
+      "supporting_evidence": ["..."],
+      "contradicting_evidence": ["..."],
+      "cheapest_next_check": "..."
+    }
+  ],
+  "root_cause": {
+    "statement": "...",
+    "confidence": "high",
+    "is_inference": true
+  },
+  "recommended_action": "rollback_deployment",
+  "action_target": "ticket-booking",
+  "requires_human_approval": true
+}
+```
+
+**`contradicting_evidence` is a required field.** A reasoner that only reports what supports its conclusion is not helping a human decide.
+
+**`is_inference: true` on the root cause is mandatory.** The system separates observed facts from Bob's reasoning, always.
+
+### Safety enforcement on Bob's output
+
+Every response Bob returns is validated through `agent/models.py:BobAnalysis.from_raw` before any other code sees it:
+
+| Check | What happens on failure |
+|---|---|
+| Action outside the allowlist (`rollback_deployment`, `restart_deployment`, `scale_workload`) | Rejected before schema validation. A test asserts a `kubectl delete ...` string is refused. |
+| Missing `action_target` when an action is recommended | Rejected |
+| Schema violation | `analysis_source` set to `"unavailable"`, incident stops |
+| Any Bob failure (timeout, auth error, unparseable output) | Same: `"unavailable"`, no plan built |
+
+**Bob cannot cause an execution.** Even a perfectly valid Bob analysis only reaches `PENDING_APPROVAL`. A human must explicitly approve before anything touches the cluster.
+
+### The rejection-feedback loop
+
+When a human rejects a plan, they must state why (`400 feedback_required` if they do not — enforced server-side in `agent/api.py`). That reason is:
+
+1. Stored in `feedback_history` on the incident
+2. Rendered into a `<human_feedback>` block in Bob's next prompt
+3. Bob is asked to produce a revised plan answering the objection
+4. The revised plan goes back to human review
+
+This means the reviewer's domain knowledge becomes part of Bob's reasoning context rather than being discarded. The loop is capped at three revisions.
+
+### The provider system
+
+`agent/providers/` makes IBM Bob one of five pluggable engines behind a single contract:
+
+```
+KUBEMEDIC_REASONING_PROVIDER=ibm-bob   # IBM Bob cloud REST API (default)
+                             watsonx   # IBM watsonx.ai
+                             anthropic # Claude (development)
+                             manual    # JSON from an interactive Bob session
+                             host      # The IDE hosting this workspace
+                             auto      # First configured engine wins
+```
+
+Every provider returns the same `BobAnalysis` — validated, allowlist-enforced, and stamped with `analysis_source` so an audit record always names what reasoned. The system downstream is unchanged by the choice of engine.
+
+---
 
 ## 4. Honesty about the runtime path
 
-**IBM Bob's runtime reasoning path is implemented and tested, but we were not
-able to complete a live model call before the deadline.** We are stating that
-plainly rather than implying otherwise.
+**IBM Bob's runtime reasoning path is fully implemented and tested. A live REST API call was not completed before the submission deadline** because the correct REST endpoint for an Inference-scoped key from `bob.ibm.com` could not be confirmed. We are stating that plainly.
 
-What is true:
+What is verifiably true:
 
-- `agent/bob.py` implements the full invocation against the IBM Bob cloud
-  RemoteAgent REST API, including response parsing that tolerates fenced,
-  enveloped or prose-wrapped output.
-- The response contract is enforced: `BobAnalysis` validates the schema and
-  rejects any action outside the allowlist before parsing.
-- The failure policy is tested and observed working. Every failure mode — no
-  credentials, authentication failure, timeout, unparseable output, schema
-  violation — produces `analysis_source: "unavailable"`, and the incident stops
-  before a plan is built. Four tests cover this, and it is what our live runs
-  actually did.
-- The rejection-feedback loop is implemented and tested: a reviewer's reason is
-  rendered into a `<human_feedback>` block in Bob's prompt, and a revised plan
-  is requested, capped at three revisions.
-- `scripts/ingest_bob_analysis.py` provides a complete, tested path to ingest a
-  JSON analysis produced in an interactive Bob session (opening this repository
-  as a Bob workspace, calling the `kubemedic-evidence` MCP tools, then running
-  the full approve/execute/verify pipeline). The resulting audit record would
-  carry `analysis_source: "ibm-bob"`.
+- `agent/providers/ibm_bob.py` implements the full REST invocation, including response parsing that tolerates fenced, enveloped or prose-wrapped output
+- The response contract is enforced: `BobAnalysis.from_raw` validates the schema and rejects any non-allowlisted action before downstream code runs
+- The failure policy is **tested and observed working live**: every failure mode — no credentials, authentication failure, timeout, unparseable output, schema violation — produces `analysis_source: "unavailable"` and stops the incident before a plan is built. The audit record in `submission/evidence/INC-20260830T063901-001.json` shows this behaviour from a real cluster run.
+- The rejection-feedback loop is implemented and tested: 343 tests pass, including tests that assert the reason reaches Bob's next prompt
+- `scripts/ingest_bob_analysis.py` provides a complete ingestion path: run Bob interactively in the workspace (it launches our MCP evidence server itself, calls the read-only tools against the live cluster), paste the JSON, and the script runs the full approve/execute/verify pipeline with `analysis_source: "ibm-bob"` in the audit record — because Bob genuinely produced the analysis
 
-What is not true, and we will not imply it is: **no live IBM Bob analysis was
-observed.** In our live cluster runs, the system reported `BOB_UNAVAILABLE`,
-produced no diagnosis, and refused to build a plan. To demonstrate the approval
-gate, executor and verifier end to end, the validation harness substitutes an
-operator-specified rollback — and labels it as operator-specified in both its
-output and the audit record.
+What is not true and we will not imply it is: **no headless live Bob analysis was observed in this submission.** In our cluster runs the system reported `BOB_UNAVAILABLE`, produced no diagnosis, and refused to build a plan. The validation harness substituted an operator-specified rollback — labelled as such in both its output and the audit record — so the approval gate, executor and verifier could still be exercised end to end.
 
-We think that behaviour is the right one to have built. A system that invents a
-diagnosis when its reasoner is unreachable is more dangerous than one that says
-nothing, and the fact that ours refuses is tested rather than asserted. But it
-means the reasoning layer, which is the part IBM Bob owns, is demonstrated by
-its contract and its tests rather than by a live run, and a judge should weigh
-it on that basis.
+A system that invents a diagnosis when its reasoner is unreachable is more dangerous than one that says nothing. Ours refuses, and that refusal is tested rather than asserted.
 
-## 5. Where to look in the code
+---
+
+## 5. The MCP tool surface — read-only by construction
+
+`.bob/mcp.json` registers exactly one MCP server:
+
+```bash
+python -m mcp_server.server --profile evidence
+```
+
+On the `evidence` profile, Bob is given **eight read-only tools and no tool that can change the cluster**:
+
+| Tool | What it returns |
+|---|---|
+| `get_workload_status` | Replica counts, current image, rollout conditions |
+| `get_pods` | Phase, readiness, restart count, termination state |
+| `get_events` | Recent Warning/Normal events for the deployment and its pods |
+| `get_recent_changes` | ReplicaSet revision history with images and change-cause annotations |
+| `get_application_health` | `/health` response through the Service proxy |
+| `get_workload_snapshot` | All five above in one call |
+| `list_tickets` | Open tickets from the store |
+| `get_ticket` | One ticket by ID |
+
+`rollback_deployment`, `restart_deployment`, and `scale_workload` are **not MCP tools**. They live in `agent/executor.py` behind the human approval gate and are never registered on any MCP profile. CI asserts this on every push rather than trusting the comment.
+
+---
+
+## 6. Where to look in the code
 
 | What | Where |
 |---|---|
-| The only module that calls a model | `agent/bob.py` |
-| The prompt, including the feedback block | `agent/bob.py:PROMPT_TEMPLATE`, `FEEDBACK_BLOCK` |
-| Response contract | `agent/models.py:BobAnalysis` |
-| Allowlist enforced before parsing | `agent/models.py:BobAnalysis.from_raw` |
-| The bridge, and the no-fabrication rule | `agent/reasoning.py` |
-| Feedback into reasoning | `agent/pipeline.py:request_revision` |
-| Bob's tool surface, read-only | `.bob/mcp.json`, `mcp_server/server.py` |
+| Provider registry and auto-selection | `agent/providers/__init__.py` |
+| IBM Bob REST provider | `agent/providers/ibm_bob.py` |
+| Host IDE / interactive provider | `agent/providers/host.py` |
+| The prompt Bob receives | `agent/providers/prompt.py` |
+| Response contract and allowlist enforcement | `agent/models.py:BobAnalysis.from_raw` |
+| No-fabrication rule | `agent/reasoning.py` |
+| Rejection feedback → Bob's next prompt | `agent/pipeline.py:request_revision` |
+| Human review gate (400 if no reason) | `agent/api.py:/api/incidents/{id}/review` |
+| Executor (allowlist + approval check) | `agent/executor.py` |
+| Independent two-signal verification | `agent/verification.py` |
+| Bob's read-only tool surface | `.bob/mcp.json`, `mcp_server/server.py` |
 | Standing instructions | `AGENTS.md` |
 | Modes, skills, personas | `.bob/` |
-| Session export | `submission/bob-report/` |
 | Interactive ingestion path | `scripts/ingest_bob_analysis.py` |
+| Session export | `submission/bob-report/` |

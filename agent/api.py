@@ -311,6 +311,56 @@ def demo_stop() -> dict[str, Any]:
     return {"demo_active": False}
 
 
+# ---------------------------------------------------------------------------
+# Live cluster orchestration for the demo
+#
+# Fault injection is presenter tooling, not an agent capability -- it lives in
+# agent/demo_tooling.py so the executor's allowlist stays exactly three
+# actions and nothing the model can reach can ship a bad image.
+# ---------------------------------------------------------------------------
+
+@app.post("/api/live/inject")
+def live_inject() -> dict[str, Any]:
+    """Ship the bad image at the live cluster. Reversible by rollback."""
+    from agent import demo_tooling
+
+    _DEMO["active"] = False          # injecting means we are on the real thing
+    try:
+        closed = demo_tooling.close_open_tickets()
+        result = demo_tooling.inject_incident()
+    except Exception as exc:
+        raise HTTPException(503, detail=f"Injection failed: {exc}") from exc
+    return {"injected": True, "tickets_closed": closed, **result}
+
+
+@app.post("/api/live/watch")
+def live_watch() -> dict[str, Any]:
+    """
+    One watcher pass. Reports what it observed as well as what it filed --
+    "0 filed" and a broken watcher look identical otherwise.
+    """
+    from agent import demo_tooling
+
+    try:
+        return demo_tooling.run_watcher_once()
+    except Exception as exc:
+        raise HTTPException(503, detail=f"Watcher failed: {exc}") from exc
+
+
+@app.post("/api/live/reset")
+def live_reset() -> dict[str, Any]:
+    """Restore the healthy image and resolve open tickets."""
+    from agent import demo_tooling
+
+    try:
+        closed = demo_tooling.close_open_tickets()
+        result = demo_tooling.reset_healthy()
+    except Exception as exc:
+        raise HTTPException(503, detail=f"Reset failed: {exc}") from exc
+    _INCIDENTS.clear()
+    return {"reset": True, "tickets_closed": closed, **result}
+
+
 @app.get("/api/tickets")
 def list_tickets(status: str | None = None) -> list[dict[str, Any]]:
     """Real tickets from the store. No fabrication."""
