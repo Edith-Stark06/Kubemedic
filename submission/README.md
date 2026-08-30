@@ -12,10 +12,10 @@ human in the loop
 | # | Deliverable | Where | Status |
 |---|---|---|---|
 | 1 | Video demonstration, including how IBM Bob was used | *link to be added* | **TODO** |
-| 2 | Written problem and solution statements | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | DRAFT — pending review |
-| 3 | Written statement on how IBM Bob was utilised | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | DRAFT — variant decision open |
+| 2 | Written problem and solution statements | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | **DONE** |
+| 3 | Written statement on how IBM Bob was utilised | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | **DONE** |
 | 4a | Working code repository | [github.com/Edith-Stark06/Kubemedic](https://github.com/Edith-Stark06/Kubemedic) | **DONE** |
-| 4b | Exported IBM Bob report of all relevant tasks/sessions | [`bob-report/`](bob-report/) | **TODO** |
+| 4b | Exported IBM Bob report of all relevant tasks/sessions | [`bob-report/`](bob-report/) | **DONE** — best-effort (Bob v1.126.0 has no export function; see bob-report/README.md) |
 
 ---
 
@@ -26,7 +26,7 @@ code. Nothing is hand-written.
 
 | File | What it shows |
 |---|---|
-| [`evidence/pytest-run.txt`](evidence/pytest-run.txt) | **221 passed** — the full suite |
+| [`evidence/pytest-run.txt`](evidence/pytest-run.txt) | **221 passed** — the full suite at time of the validate run |
 | [`evidence/validate-run.txt`](evidence/validate-run.txt) | **29 assertions, 0 failures** against a live k3s cluster |
 | `evidence/INC-*.json` | A real audit record from that run |
 
@@ -91,12 +91,12 @@ found.
 git clone https://github.com/Edith-Stark06/Kubemedic.git
 cd Kubemedic
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest                # 221 passed, no cluster or credentials needed
+python -m pytest                # 238 passed, no cluster or credentials needed
 ```
 
 With a Kubernetes cluster, `README.md` has the demo steps and
 `bash scripts/validate.sh` reproduces `evidence/validate-run.txt`.
 
 Verified from a clean clone on 2026-08-30: 140 tracked files, no build
-artifacts, 221 tests pass, and `mcp_server.server`, `agent.api` and
+artifacts, 238 tests pass, and `mcp_server.server`, `agent.api` and
 `dashboard.app` all import.

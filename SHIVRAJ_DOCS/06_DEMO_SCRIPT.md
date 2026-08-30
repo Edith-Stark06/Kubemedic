@@ -22,7 +22,7 @@ Presenting that as verified recovery is a false claim to a judge.
 bash scripts/reset_healthy.sh
 kubectl -n opspilot get pods            # expect 2/2 Running
 rm -f records/INC-*.json                # so the run's record is unambiguous
-python -m pytest                        # expect 206 passed
+python -m pytest                        # expect 238 passed
 ```
 
 Close Slack, silence notifications, and rehearse once. The injected failure
@@ -173,7 +173,7 @@ cat records/INC-*.json | python -m json.tool | head -40
 > verified. If Bob was unavailable, the record says so. We never claim a
 > verification we didn't run."
 
-> "206 tests, and `scripts/validate.sh` runs that whole loop against a live
+> "238 tests, and `scripts/validate.sh` runs that whole loop against a live
 > cluster with hard assertions at every step."
 
 ---

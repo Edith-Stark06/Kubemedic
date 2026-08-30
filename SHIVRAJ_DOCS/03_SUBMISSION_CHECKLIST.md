@@ -13,10 +13,10 @@ Quoted from ENTRY REQUIREMENTS. Every one is mandatory.
 | # | Deliverable | Owner | Status | Where |
 |---|---|---|---|---|
 | 1 | Video demonstration of the solution, **including how IBM Bob was used** | Verona | ☐ TODO | `06_DEMO_SCRIPT.md` |
-| 2 | Written problem and solution statements | Ramana | ☐ DRAFTED | `SUB-001_PROBLEM_AND_SOLUTION.md` |
-| 3 | Written statement on how IBM Bob was utilised | Ramana | ☐ DRAFTED | `SUB-002_HOW_WE_USED_IBM_BOB.md` |
+| 2 | Written problem and solution statements | Ramana | ☑ DONE | `submission/PROBLEM_AND_SOLUTION.md` |
+| 3 | Written statement on how IBM Bob was utilised | Ramana | ☑ DONE | `submission/HOW_WE_USED_IBM_BOB.md` |
 | 4a | Working code repository | Shivraj | ☑ DONE | `github.com/Edith-Stark06/Kubemedic` |
-| 4b | **Exported IBM Bob report of all relevant tasks/sessions** | Shivraj | ☐ TODO | `02_BOB_REPORT_EXPORT.md` |
+| 4b | **Exported IBM Bob report of all relevant tasks/sessions** | Shivraj | ☑ DONE | `submission/bob-report/` (best-effort; Bob v1.126.0 has no export function) |
 
 Deliverable 4b sits inside another bullet and is the one teams miss.
 
@@ -91,11 +91,11 @@ trip this clause. `06_DEMO_SCRIPT.md` has a fully real terminal alternative.
 
 | Artifact | Command | Status |
 |---|---|---|
-| Test output | `python -m pytest \| tee submission/evidence/pytest-run.txt` | ☐ |
-| End-to-end run | `bash scripts/validate.sh \| tee submission/evidence/validate-run.txt` | ☐ |
-| Real audit record | copy one `records/INC-*.json` into `submission/evidence/` | ☐ |
-| Bob analysis record | a record with `analysis_source: "ibm-bob"` — **only if `BOB-001` lands** | ☐ |
-| Fresh-clone proof | `01_MERGE_AND_RELEASE.md` §5 | ☐ |
+| Test output | `python -m pytest \| tee submission/evidence/pytest-run.txt` | ☑ in `submission/evidence/pytest-run.txt` |
+| End-to-end run | `bash scripts/validate.sh \| tee submission/evidence/validate-run.txt` | ☑ in `submission/evidence/validate-run.txt` |
+| Real audit record | copy one `records/INC-*.json` into `submission/evidence/` | ☑ `INC-20260830T063901-001.json` |
+| Bob analysis record | a record with `analysis_source: "ibm-bob"` — **only if `BOB-001` lands** | ☐ not yet |
+| Fresh-clone proof | `01_MERGE_AND_RELEASE.md` §5 | ☑ done 2026-08-30 |
 
 ---
 
@@ -126,7 +126,7 @@ trip this clause. `06_DEMO_SCRIPT.md` has a fully real terminal alternative.
 - A rejected plan is structurally incapable of executing
 - Rejection requires a reason, and that reason becomes reasoning context
 - Recovery is confirmed on two independent signals and never inferred
-- 206 tests; end-to-end harness passes against a live cluster
+- 238 tests; end-to-end harness passes against a live cluster
 
 **Do not claim, unless `BOB-001` lands:**
 

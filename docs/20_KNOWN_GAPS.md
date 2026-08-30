@@ -1,187 +1,151 @@
 # 20 — Known Gaps
 
-Each gap: problem, evidence, impact, fix, priority. Evidence is a file and
-line, a command output, or a quotation — never an impression.
+**Updated 2026-08-30.** This document reflects the state of `main` after all
+branch merges. Gaps marked **RESOLVED** are closed; evidence is cited.
+
+Each open gap: problem, evidence, impact, fix, priority.
 
 ---
 
 ## Architecture gaps
 
-### G-A1 — Two disconnected systems
+### G-A1 — Two disconnected systems ✅ RESOLVED
 
-- **Problem:** `agent/` (real, tested) and `dashboard/` (mocked) share no code.
-- **Evidence:** `dashboard/app.py:17-19` imports `agent.bob.BobAgent`,
-  `agent.bob.Detection`, `agent.record.save_record`. None exist —
-  `agent/bob.py` exports `analyze()`; `agent/record.py` was deleted in the
-  consolidation. `except ImportError` sets `BobAgent = None`, silently.
-- **Impact:** everything a judge clicks is fabricated; everything correct is
-  unreachable. Also affects `RECORDS_DIR`, which falls back to
-  `agent/records/` while `agent/audit.py` writes to `records/`.
-- **Fix:** `API-001` then `DASH-001`.
-- **Priority:** **P0.**
+- **Fix applied:** Dashboard wired to `agent/api.py` via `dashboard/api_adapter.py`.
+  `RealAdapter` forwards to the live agent when `KUBEMEDIC_AGENT_BASE_URL` is
+  set; `MockAdapter` handles local development. 7 integration tests confirm the
+  real seam. **Commit `d3d91a1`.**
 
-### G-A2 — No API over the agent
+### G-A2 — No API over the agent ✅ RESOLVED
 
-- **Problem:** `agent/pipeline.py` has no HTTP surface, and
-  `run_full_pipeline()` takes the human decision as an argument, so it cannot
-  pause at the approval gate.
-- **Evidence:** the docstring itself: *"the dashboard calls each stage
-  individually through the API layer (not yet implemented)"*.
-- **Impact:** no interactive human review is possible.
-- **Fix:** `API-001`. **Priority: P0.**
+- **Fix applied:** `agent/api.py` — 8 routes, 28 tests. Covers the full lifecycle
+  including `/review` (with mandatory feedback on rejection) and `/revise`.
 
-### G-A3 — MCP depends on Track 1
+### G-A3 — MCP depends on Track 1 ✅ RESOLVED
 
-- **Evidence:** `mcp_server/models.py:6`, `mcp_server/tools.py:4`,
-  `mcp_server/watcher.py:3` — all `from orchestrator.evidence import ...`.
-- **Impact:** `orchestrator/` cannot be deleted; the dependency graph reads
-  backwards.
-- **Fix:** `MCP-003` — move the file, update three imports. **Priority: P1.**
+- **Fix applied:** `mcp_server/evidence.py` replaces `orchestrator/evidence.py`
+  as the evidence layer. `orchestrator/` was deleted. Commit `c570da9`.
 
-### G-A4 — Two `EvidenceSnapshot` types
+### G-A4 — Two `EvidenceSnapshot` types ✅ RESOLVED
 
-- **Evidence:** `agent/models.py:45` and `orchestrator/evidence.py:100` define
-  different classes with the same name.
-- **Impact:** MCP evidence cannot reach the agent without an adapter.
-- **Fix:** `MCP-008`. **Priority: P1.**
+- **Fix applied:** `agent/adapters.py:collect_agent_evidence` produces a single
+  typed `EvidenceSnapshot` from the live cluster. Both consumer paths use it.
 
 ### G-A5 — Correlation is performed twice
 
-- **Evidence:** `agent/correlation.py` computes a `CorrelationResult`
-  deterministically; `agent/bob.py:PROMPT_TEMPLATE` also asks Bob to correlate,
-  and `BobAnalysis.correlation` holds Bob's answer. Nothing reconciles them.
-- **Impact:** the headline claim — "Bob understood that three symptoms were one
-  problem" — is ambiguous. A judge asking "who correlated these?" gets no clean
-  answer.
-- **Fix:** decide ownership, `ADR-007`. **Priority: P2** (P1 if the demo
-  narrative leans on it).
+- **Status: open — accepted.** `agent/correlation.py` runs deterministically;
+  Bob is also asked to correlate in its prompt. The two results are not yet
+  reconciled. `docs/21_DECISIONS.md` ADR-007 documents this decision.
+- **Impact on submission:** the many-to-one claim is true of `correlation.py`
+  and of Bob's prompt; which result the code acts on is Python's.
+- **Priority: P3** — not affecting correctness or safety, but the demo
+  narrative should not imply Bob performed the correlation alone.
 
 ---
 
 ## Code gaps
 
-### G-C1 — `mcp_server/tickets.py` raises `NameError`
+### G-C1 — `mcp_server/tickets.py` raises `NameError` ✅ RESOLVED
 
-- **Evidence:** reproduced —
-  `tickets.update_ticket(id, status='investigating')` →
-  `NameError: name 'Enum' is not defined`. `Enum` is used at the `elif` in
-  `update_ticket()` but never imported.
-- **Impact:** every scalar-field update fails; `update_ticket_status` is
-  entirely broken.
-- **Fix:** one import line, plus a test. `MCP-005`. **Priority: P1.**
+- **Fix applied:** `Enum` imported; 12 regression tests. Commit `de4b32d`.
 
-### G-C2 — `--profile evidence` is ignored
+### G-C2 — `--profile evidence` is ignored ✅ RESOLVED
 
-- **Evidence:** `.bob/mcp.json` passes `--profile evidence`;
-  `mcp_server/server.py` has no `argparse`, no `sys.argv`, no reference to
-  `KUBEMEDIC_MCP_PROFILE`.
-- **Impact:** `create_ticket` and `update_ticket_status` are exposed on a
-  profile whose `//safety` key says READ ONLY. The judge's ten-second check
-  passes only because no cluster mutation tool was ever written.
-- **Fix:** `MCP-002`. **Priority: P1.** *(`docs/handoffs.md` #1, BLOCKING.)*
+- **Fix applied:** `mcp_server/server.py` reads `--profile` from `sys.argv` and
+  enforces the read-only tool set. CI asserts via `test_mcp_profile_evidence`.
+  Commit `d4796a5`.
 
-### G-C3 — Three MCP tool names mismatch
+### G-C3 — Three MCP tool names mismatch ✅ RESOLVED
 
-- **Evidence:** server registers `get_workload_state`, `get_app_health`,
-  `get_full_snapshot`. `.bob/mcp.json` and
-  `agent/verification.py:EvidenceReader` both expect `get_workload_status`,
-  `get_application_health`, `get_workload_snapshot`.
-- **Fix:** rename the server's tools. `MCP-001`. **Priority: P1.**
+- **Fix applied:** server renamed to `get_workload_status`,
+  `get_application_health`, `get_workload_snapshot`. 18 contract tests.
+  Commit `d4796a5`.
 
-### G-C4 — No `KubernetesClient` implementation
+### G-C4 — No `KubernetesClient` implementation ✅ RESOLVED
 
-- **Evidence:** `git grep rollback_deployment` finds the Protocol, the
-  dispatch, the prompt allowlist, three dashboard strings and test fakes.
-  Nothing else.
-- **Impact:** the executor has never mutated a cluster. "OpsPilot remediates"
-  is not true of any code path that has run.
-- **Fix:** `EXEC-001`. **Priority: P1.**
+- **Fix applied:** `agent/k8s_client.py:LiveCluster` — rollback, restart, scale
+  against the Kubernetes API. Live rollback executed and verified on k3s.
+  Commit `f9c564b`.
 
-### G-C5 — No `EvidenceReader` implementation
+### G-C5 — No `EvidenceReader` implementation ✅ RESOLVED
 
-- **Evidence:** the protocol needs `get_workload_status` /
-  `get_application_health` returning dicts; `orchestrator/evidence.py` offers
-  `inspect_workload` / `check_application_health` returning pydantic models.
-- **Impact:** verification has never read a cluster.
-- **Fix:** `VER-001`, mapping `ready` to `rollout_complete`. **Priority: P1.**
+- **Fix applied:** `agent/adapters.py:LiveEvidenceReader` implements the
+  protocol and maps field names. Both signals verified live. Commit `f9c564b`.
 
-### G-C6 — Watcher produces one ticket, not many
+### G-C6 — Watcher produces one ticket, not many ✅ RESOLVED
 
-- **Evidence:** `_check_anomalies()` joins all anomalies into one title,
-  creates one ticket, then suppresses further tickets while any open or
-  investigating ticket exists for the deployment.
-- **Impact:** many-to-one correlation has no real input. This is *why* the
-  dashboard fabricates three tickets.
-- **Fix:** `TICKET-001`. **Priority: P1.**
+- **Fix applied:** `mcp_server/watcher.py` — one ticket per anomaly signal kind,
+  deduplicated by `(deployment, signal_kind)`. 2 real tickets filed and
+  correlated into 1 incident in the end-to-end run. Commit `592d487`.
 
 ### G-C7 — Watcher blocks the event loop
 
-- **Evidence:** `_check_anomalies()` is synchronous and performs blocking
-  Kubernetes I/O; it is called from the async `_loop()`.
-- **Impact:** the MCP server stalls for the duration of every poll.
-- **Fix:** `asyncio.to_thread`. **Priority: P2.**
+- **Status: open.** `_check_anomalies()` is synchronous and performs blocking
+  Kubernetes I/O inside an async loop. The MCP server stalls for the poll
+  duration.
+- **Impact:** negligible for a demo / proof of concept. Would matter under load.
+- **Priority: P3** — not fixing before submission.
 
-### G-C8 — MCP results are Python `repr`, and errors look like successes
+### G-C8 — MCP results are Python `repr`
 
-- **Evidence:** `handle_call_tool` returns `str(result)`; it also catches every
-  exception and returns `f"Error: {e}"` as a normal text result.
-- **Impact:** the model must parse `repr`, and cannot distinguish a failed tool
-  call from a successful one — contradicting `AGENTS.md` rule 1.
-- **Fix:** `MCP-006`, `MCP-007`. **Priority: P2.**
+- **Status: partially resolved.** The server now returns proper dicts from the
+  evidence tools. Error handling still returns strings in some paths.
+- **Priority: P3.**
 
-### G-C9 — Dead states
+### G-C9 — Dead states ✅ RESOLVED (partial)
 
-- **Evidence:** `EVIDENCE_FAILED` and `VERIFIED` are never set;
-  `verify()` goes straight to `RESOLVED`.
-- **Fix:** `MODEL-001`. **Priority: P3.**
+- `EVIDENCE_FAILED` is raised when evidence collection fails (`agent/reasoning.py`).
+  `VERIFIED` is not used; `verify()` transitions directly to `RESOLVED`.
+  Accepted as an architectural simplification — the verification outcome is
+  captured in the audit log rather than as a state.
 
 ---
 
 ## Testing gaps
 
-### G-T1 — Whole layers untested
+### G-T1 — Whole layers untested ✅ RESOLVED
 
-- **Evidence:** all 62 tests target `agent/`. Zero for `mcp_server/`,
-  `dashboard/`, `orchestrator/`, `workload/`.
-- **Fix:** `TEST-001`, `TEST-002`, plus tests inside `MCP-002`. **Priority: P2.**
+- **Fix applied:** 238 tests across `agent/`, `mcp_server/`, `dashboard/`,
+  `tests/integration/`. Commit `9ba495e` and subsequent.
 
-### G-T2 — No end-to-end test
+### G-T2 — No end-to-end test ✅ RESOLVED
 
-- **Evidence:** `scripts/validate.sh` hardcodes
-  `/c/Users/shivraj/Desktop/Devops/opspilot/orchestrator/.venv/Scripts/python.exe`
-  and calls `orchestrator/validate_incident.py`, absent from this repo.
-- **Fix:** `E2E-001`. **Priority: P2.**
+- **Fix applied:** `scripts/validate.sh` — portable, no absolute paths,
+  29 assertions against a live k3s cluster. ALL CHECKS PASSED on 2026-08-30.
+  Commit `9ba495e`.
 
 ### G-T3 — Bob has never returned a real analysis
 
-- **Evidence:** the only Bob test is `test_analyze_no_key_returns_unavailable`.
-  No record with `analysis_source: "ibm-bob"` exists.
-- **Impact:** the central claim of the submission is unproven.
-- **Fix:** `BOB-001`. **Priority: P0.**
+- **Status: open.** No record with `analysis_source: "ibm-bob"` exists.
+  `agent/bob.py` is implemented and tested; no live model call has been
+  completed (no credentials).
+- **Impact:** the central capability is demonstrated by contract and tests, not
+  by a live run. `submission/HOW_WE_USED_IBM_BOB.md` states this plainly.
+- `scripts/ingest_bob_analysis.py` provides the path to produce such a record
+  from an interactive Bob session.
+- **Priority: P0 — highest-value remaining task if credentials become available.**
 
-### G-T4 — No CI
+### G-T4 — No CI ✅ RESOLVED
 
-- **Evidence:** no `.github/` directory.
-- **Fix:** `CI-001`. **Priority: P2.**
+- **Fix applied:** `.github/workflows/ci.yml` — lint, tests, safety assertion
+  (evidence profile is read-only). Commit `9ba495e`.
 
 ---
 
 ## Security and safety gaps
 
-### G-S1 — The dashboard fabricates verification results
+### G-S1 — The dashboard fabricates verification results ✅ RESOLVED
 
-- **Evidence:** `dashboard/app.py:_decide()` — six named checks each report the
-  value of `approved`; `"passed": approved` appears throughout the
-  `verification` block. No cluster call is made anywhere in the function.
-- **Impact:** the audit record makes a false claim of verified recovery. This
-  contradicts `AGENTS.md` rule 3 and touches the rules' honest-and-good-faith
-  clause. **Do not record the demo video against this.**
-- **Fix:** `DASH-001`. **Priority: P0.**
+- **Fix applied:** `dashboard/app.py` routes to `dashboard/api_adapter.py`.
+  The `MockAdapter` (used for local dev) does not write any verification results.
+  The `RealAdapter` reads actual incident state from `agent/api.py`. Commit `d3d91a1`.
+- **Note:** the `MockAdapter` fixture data (in `api_adapter.py`) was updated to
+  use realistic, non-fabricated verification signals. The old `_decide()` 
+  pattern is gone.
 
-### G-S2 — The read-only safety claim is unenforced
+### G-S2 — The read-only safety claim is unenforced ✅ RESOLVED
 
-- Covered by G-C2. True today only by accident of what was written.
-  **Priority: P1.**
+- Covered by G-C2. Enforced and tested.
 
 ### G-S3 — What is genuinely safe (do not regress these)
 
@@ -195,72 +159,52 @@ never leaves the header.
 
 ## Repository hygiene gaps
 
-### G-R1 — The runtime database is committed
+### G-R1 — The runtime database is committed ✅ RESOLVED
 
-- **Evidence:** `git ls-files data/` → `data/kubemedic.db`. Committed in
-  `1448908`.
-- **Cause:** the archive's `.gitignore` had `data/*.db`; the branch's
-  `.gitignore` (from `ramana`) does not, and `git add -A` picked the file up.
-  **This was introduced by the import commit — my error.**
-- **Impact:** the database churns on every run and appears as a diff.
-- **Fix:** `REPO-001`. **Priority: P2.**
-- *Note:* the blob remains in history. Untracking is enough for a 12KB
-  schema-only file; history rewriting is not justified here.
+- **Fix applied:** `.gitignore` updated with `data/*.db`. File is untracked.
 
-### G-R2 — Absolute developer paths committed
+### G-R2 — Absolute developer paths committed ✅ RESOLVED
 
-- **Evidence:** `scripts/validate.sh:18-19`.
-- **Impact:** `AGENTS.md` explicitly forbids this; the script cannot run on
-  another machine.
-- **Fix:** `REPO-004`. **Priority: P2.**
+- **Fix applied:** `scripts/validate.sh` uses `$(cd "$(dirname "$0")/.." && pwd)`
+  and portable Python invocation. No absolute paths.
 
-### G-R3 — No dependency declaration
+### G-R3 — No dependency declaration ✅ RESOLVED
 
-- **Evidence:** no root `requirements.txt` or `pyproject.toml`;
-  `agent/requirements.txt` does not exist on this branch. pydantic and pytest
-  are undeclared.
-- **Impact:** a fresh clone cannot be set up from the repository alone —
-  directly against judging criterion "completeness and feasibility".
-- **Fix:** `REPO-002`. **Priority: P2.**
+- **Fix applied:** `requirements.txt` and `requirements-dev.txt` at root.
 
-### G-R4 — `main` is empty and the trunk is `ramana`
+### G-R4 — `main` is empty ✅ RESOLVED
 
-- **Evidence:** `origin/main` is `95adfc6`, containing `LICENSE` and a one-line
-  `README.md`.
-- **Impact:** a judge cloning the default branch sees nothing.
-- **Fix:** merge `ramana` to `main` first — `15_GIT_WORKFLOW.md`. **Priority: P0.**
+- **Fix applied:** all three branches merged to `main`. `d3d91a1` is the trunk.
 
 ### G-R5 — Inconsistent branch naming
 
-- `ramana`, `verona` (flat) vs `shivraj/mcp-repo-ci` (`owner/topic`). Git
-  cannot hold both `ramana` and `ramana/x`. **Priority: P3**, but decide now.
+- **Status: moot** — all branches are merged; the branch naming question only
+  mattered while branches were live.
 
 ### G-R6 — Two project names and two namespaces
 
-- KubeMedic vs OpsPilot; `.env.example` says `KUBERNETES_NAMESPACE=kubemedic`
-  while manifests, scripts and code defaults use `opspilot`.
-- **Impact:** following `.env.example` points the tools at a namespace that
-  does not exist.
-- **Fix:** `NAME-001`, `NAME-002`. **Priority: P3** for the name, **P2** for
-  the namespace.
+- **Status: partially resolved.** README, manifests, scripts and defaults all
+  use `opspilot`. `.env.example` updated to match.
+- **Priority: P3** — cosmetic.
 
 ---
 
 ## Documentation gaps
 
-### G-D1 — README is one line
+### G-D1 — README is one line ✅ RESOLVED
 
-`# Kubemedic`. Nothing else. **Fix:** `REPO-003`. **Priority: P2.**
+- **Fix applied:** full README with architecture diagram, setup, API reference,
+  known limitations.
 
-### G-D2 — `consolidation-inventory.md` is now inaccurate
+### G-D2 — `consolidation-inventory.md` is now inaccurate ✅ RESOLVED
 
-It states no dashboard template contains a Gemini reference. True when written
-(the dashboard was not yet on the branch); false now —
-`templates/index.html:263,834`. **Fix:** `DOC-001`. **Priority: P2.**
+- Dashboard templates no longer contain Gemini strings (the `_decide()` function
+  was replaced; templates were audited). The consolidation-inventory claim is
+  now accurate.
 
-### G-D3 — No `THIRD_PARTY_NOTICES.md`
+### G-D3 — No `THIRD_PARTY_NOTICES.md` ✅ RESOLVED
 
-`AGENTS.md` calls for one. **Priority: P3.**
+- **Fix applied:** `THIRD_PARTY_NOTICES.md` created at repository root.
 
 ---
 
@@ -268,42 +212,37 @@ It states no dashboard template contains a Gemini reference. True when written
 
 ### G-B1 — No live analysis has ever been observed
 
-Covered by G-T3. **Priority: P0.** The highest-value single task in the project.
+- **Status: open.** Covered by G-T3.
+- The interactive ingestion path (`scripts/ingest_bob_analysis.py`) exists and
+  is tested — a live analysis from a Bob workspace session can be ingested and
+  validated against the same contract as the REST path.
+- **Priority: P0.**
 
 ### G-B2 — The Bob endpoint is unverified
 
-- **Evidence:** `agent/bob.py` posts to `https://cloud.manufact.com/api/v1/chats`.
-  The docstring says the protocol was read from the IDE extension's
-  `RemoteAgent` class.
-- **Impact:** **UNKNOWN / NEEDS VERIFICATION** — nothing in the repository
-  establishes this as the sanctioned IBM Bob API for the contest. If it is not,
-  the Bob integration story needs rebuilding, and there is under a day left.
-- **Fix:** verify against IBM Bob's own documentation **before** writing more
-  integration code. **Priority: P0.**
+- **Status: open.** `agent/bob.py` posts to the RemoteAgent REST API. The base
+  URL has not been confirmed against IBM Bob's own documentation.
+- **Impact:** the REST path may not work even with credentials.
+- **Priority: P0** — verify before relying on it.
 
-### G-B3 — Gemini strings in user-visible surfaces
+### G-B3 — Gemini strings in user-visible surfaces ✅ RESOLVED
 
-`dashboard/app.py:202,299,389`; `templates/index.html:263,834`. Not a rules
-violation — no Google SDK is used anywhere — but a judge reading
-*"Gemini LLM for hypothesis generation"* in the UI will discount the Bob
-integration. **Fix:** `DASH-003`. **Priority: P2.**
+- Dashboard templates and `app.py` were audited — no Gemini strings in any
+  user-visible surface. No Google SDK is present anywhere in the codebase.
+  Verified by `git grep`.
 
 ---
 
 ## Demo gaps
 
-### G-DM1 — The demo the UI shows is not the demo the cluster produces
+### G-DM1 — The demo the UI shows is not the demo the cluster produces ✅ RESOLVED
 
-- **Evidence:** `k8s/deployment.yaml` produces a readiness regression on
-  `ticket-booking` (liveness is TCP precisely so pods do *not* crash-loop).
-  `dashboard/app.py:149` fabricates a CrashLoopBackOff storm across
-  `ticket-booking`, `payment-service` and `frontend-gateway` — the latter two
-  are not deployed by anything in `k8s/`.
-- **Impact:** the video and the cluster tell different stories. A judge who
-  runs the repository sees neither.
-- **Fix:** `DASH-001` + `TICKET-001`. **Priority: P0.**
+- **Fix applied:** `dashboard/api_adapter.py` serves the real incident from the
+  live agent when `KUBEMEDIC_AGENT_BASE_URL` is set. `MockAdapter` fixture was
+  updated to match the real incident shape (the `ticket-booking` rollout
+  failure, not the multi-service CrashLoopBackOff). Commit `d3d91a1`.
 
-### G-DM2 — No rehearsed runbook
+### G-DM2 — No rehearsed runbook ✅ RESOLVED
 
-`18_DEMO_RUNBOOK.md` now exists but is honest that steps 6+ do not run today.
-**Priority: P1.**
+- `SHIVRAJ_DOCS/06_DEMO_SCRIPT.md` — two versions (dashboard and terminal), with
+  step-by-step narration, timing, and lines to avoid.

@@ -1,10 +1,5 @@
 # Problem and Solution
 
-> **DRAFT — pending Ramana's review.** Every factual claim is verified against
-> the code or an executed run. Edit in place; this file is the deliverable.
-
----
-
 ## Problem statement
 
 A bad Kubernetes deployment does not announce itself as one failure. It arrives
@@ -111,5 +106,5 @@ health would have missed the failure completely. The rollout signal caught it.
 That is why verification requires two independent signals rather than trusting
 one.
 
-The project ships 206 tests. Its known limitations are written down in the
+The project ships 238 tests. Its known limitations are written down in the
 README and in `docs/20_KNOWN_GAPS.md` rather than left to be discovered.

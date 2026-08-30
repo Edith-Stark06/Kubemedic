@@ -1,8 +1,8 @@
 # 00 — Project Status
 
-**Branch:** `shivraj/mcp-repo-ci`
-**Audited:** 2026-08-29 @ `1448908` · **Updated:** 2026-08-30 @ `9ba495e`
-**Test result:** `python -m pytest` → **206 passed** (executed)
+**Branch:** `main`
+**Audited:** 2026-08-29 @ `1448908` · **Updated:** 2026-08-30 @ `bfca0e5`
+**Test result:** `python -m pytest` → **238 passed** (all branches merged)
 **End-to-end:** `bash scripts/validate.sh` → **ALL CHECKS PASSED** against a
 live k3s cluster (executed)
 
@@ -31,7 +31,7 @@ lane). Nine commits, `de4b32d`..`9ba495e`.
 | `orchestrator/` alive as a dependency | Deleted |
 | No dependencies declared, no CI, 1-line README | All present |
 | `validate.sh` unrunnable anywhere | Runs; every check passes |
-| 62 tests, `agent/` only | 206 tests across agent, MCP, adapters, API, watcher |
+| 62 tests, `agent/` only | 238 tests across agent, MCP, adapters, API, dashboard, watcher |
 
 **Still open, and both are Verona's lane or blocked:** the dashboard is still
 mocked (`DASH-001`), and **IBM Bob has still never returned a live analysis**
@@ -181,7 +181,7 @@ Updated 2026-08-30.
 | Subsystem | Was | Now | Basis |
 |---|---|---|---|
 | MCP | PARTIAL | **READY** | Names aligned, profile enforced, 18 contract tests |
-| Agent | READY | **READY** | 206 tests |
+| Agent | READY | **READY** | 238 tests |
 | Reasoning | UNVERIFIED | **UNVERIFIED** | Feedback loop built and tested; no live Bob response yet |
 | Ticketing | PARTIAL | **READY** | NameError fixed; one ticket per signal; 25 tests |
 | Dashboard | BROKEN | **BROKEN** | Untouched -- Verona's lane, `DASH-001` |

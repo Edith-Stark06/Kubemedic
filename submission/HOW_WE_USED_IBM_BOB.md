@@ -1,10 +1,5 @@
 # How IBM Bob Was Utilised
 
-> **DRAFT — pending Ramana's review, and one open decision.** Section 4 has two
-> variants: keep the one that matches whether `BOB-001` (a live IBM Bob
-> analysis) succeeded, and delete the other. Do not soften Variant B if that is
-> the one that applies.
-
 ---
 
 ## 1. IBM Bob is the reasoning layer, and it is the only one
@@ -79,28 +74,6 @@ code. Several findings in `docs/20_KNOWN_GAPS.md` came out of that.
 
 ## 4. Honesty about the runtime path
 
-> **Ramana: keep ONE of the following. Delete the other.**
-
----
-
-### Variant A — `BOB-001` succeeded
-
-We ran the full loop against a live Kubernetes cluster with IBM Bob connected.
-IBM Bob received the correlated evidence and returned ranked hypotheses, a root
-cause, and a recommended action from the allowlist. A human reviewer rejected
-the first plan with a written reason; that reason was added to the incident
-context and sent back to Bob, which produced a revised plan answering the
-objection; the reviewer approved it; the action executed; and recovery was
-verified independently on two signals.
-
-The audit record for that run is included at
-`submission/evidence/INC-<id>.json`. Its `analysis_source` field reads
-`ibm-bob`, and the full analysis Bob returned is embedded in the record.
-
----
-
-### Variant B — `BOB-001` did not succeed
-
 **IBM Bob's runtime reasoning path is implemented and tested, but we were not
 able to complete a live model call before the deadline.** We are stating that
 plainly rather than implying otherwise.
@@ -120,6 +93,11 @@ What is true:
 - The rejection-feedback loop is implemented and tested: a reviewer's reason is
   rendered into a `<human_feedback>` block in Bob's prompt, and a revised plan
   is requested, capped at three revisions.
+- `scripts/ingest_bob_analysis.py` provides a complete, tested path to ingest a
+  JSON analysis produced in an interactive Bob session (opening this repository
+  as a Bob workspace, calling the `kubemedic-evidence` MCP tools, then running
+  the full approve/execute/verify pipeline). The resulting audit record would
+  carry `analysis_source: "ibm-bob"`.
 
 What is not true, and we will not imply it is: **no live IBM Bob analysis was
 observed.** In our live cluster runs, the system reported `BOB_UNAVAILABLE`,
@@ -135,8 +113,6 @@ means the reasoning layer, which is the part IBM Bob owns, is demonstrated by
 its contract and its tests rather than by a live run, and a judge should weigh
 it on that basis.
 
----
-
 ## 5. Where to look in the code
 
 | What | Where |
@@ -151,3 +127,4 @@ it on that basis.
 | Standing instructions | `AGENTS.md` |
 | Modes, skills, personas | `.bob/` |
 | Session export | `submission/bob-report/` |
+| Interactive ingestion path | `scripts/ingest_bob_analysis.py` |

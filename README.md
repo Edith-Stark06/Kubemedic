@@ -66,7 +66,7 @@ mcp_server/     the evidence surface Bob is allowed to see
 k8s/            the ticket-booking demo workload
 workload/       the demo app; HEALTHY=false is the incident lever
 scripts/        inject, reset, and the end-to-end validation harness
-tests/          206 tests
+tests/          238 tests
 docs/           architecture, contracts, gaps, compliance
 ```
 
@@ -83,7 +83,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest
 ```
 
-Expected: `206 passed`. The suite needs no cluster and no credentials — the
+Expected: `238 passed`. The suite needs no cluster and no credentials — the
 Kubernetes API is mocked and every ticket test uses a temporary database.
 
 ### Configuration
@@ -188,9 +188,11 @@ evaluate:
 - **IBM Bob's endpoint needs verification.** `agent/bob.py` posts to the cloud
   RemoteAgent REST API; confirm the base URL against IBM Bob's own
   documentation before relying on it.
-- **The dashboard is not wired to this API yet.** `dashboard/app.py` still
-  serves hardcoded data and is being reworked. Use `scripts/validate.sh` or the
-  API directly to see the real system.
+- **The dashboard falls back to mock data when the agent is not running.**
+  Set `KUBEMEDIC_AGENT_BASE_URL=http://127.0.0.1:8100` to connect the dashboard
+  to the live agent. Without it, `MockAdapter` serves fixture data for local
+  development. Use `scripts/validate.sh` or the agent API directly to exercise
+  the real system without the dashboard.
 - **Correlation is deterministic Python**, and Bob is *also* asked to correlate.
   The two results are not yet reconciled — see `docs/21_DECISIONS.md` ADR-007.
 - **Single workload scope.** One deployment, one service.
