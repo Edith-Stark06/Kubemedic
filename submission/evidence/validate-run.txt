@@ -28,13 +28,13 @@ KubeMedic end-to-end validation
 
 === 4. Observe: the watcher files tickets ===
   [PASS] at least one ticket filed :: 2 created
-      TKT-20260830-103718-2776  Rollout stalled: ticket-booking — 2/3 replicas ready
-      TKT-20260830-103718-2822  Pod not ready: ticket-booking — ticket-booking-85cf847675-vk6gt is not ready
+      TKT-20260830-105551-2591  Rollout stalled: ticket-booking — 2/3 replicas ready
+      TKT-20260830-105551-2687  Pod not ready: ticket-booking — ticket-booking-85cf847675-2wg2g is not ready
   [PASS] re-polling files nothing new :: deduplicated by signal kind
 
 === 5. Correlate: many tickets, one incident ===
   [PASS] every open ticket joined the incident :: 2 members, 0 excluded
-  [PASS] one master incident id :: INC-20260830T103718-001
+  [PASS] one master incident id :: INC-20260830T105551-001
 
 === 6. Reason: ask IBM Bob ===
   [INFO] IBM Bob unavailable -- no credentials configured.
@@ -42,7 +42,7 @@ KubeMedic end-to-end validation
          correct: it reports the outage rather than inventing one.
   [PASS] no plan was fabricated
   [PASS] analysis is marked unavailable
-  [INFO] Supplying an OPERATOR-SPECIFIED rollback to revision 55 so the gate, executor and verifier are still exercised.
+  [INFO] Supplying an OPERATOR-SPECIFIED rollback to revision 59 so the gate, executor and verifier are still exercised.
 
 === 7. Gate: execution is impossible before approval ===
   [PASS] unapproved execution refused :: Execution requires APPROVED state; current state is IncidentState.PENDING_APPROVAL
@@ -63,7 +63,7 @@ KubeMedic end-to-end validation
 
 === 11. Execute ===
   [PASS] execution succeeded :: rollback_deployment on ticket-booking succeeded
-  [PASS] the cluster reports the change :: {'action': 'rollback_deployment', 'namespace': 'opspilot', 'deployment': 'ticket-booking', 'from_revision': '56', 'to_revision': '55', 'image': 'ticketbooking:1.0', 'observed_generation': 103, 'new_revision': '56'}
+  [PASS] the cluster reports the change :: {'action': 'rollback_deployment', 'namespace': 'opspilot', 'deployment': 'ticket-booking', 'from_revision': '60', 'to_revision': '59', 'image': 'ticketbooking:1.0', 'observed_generation': 111, 'new_revision': '60'}
 
 === 12. Verify: independent, two signals ===
       rollout_healthy: passed=True :: ready=True, updated=2, desired=2
@@ -74,7 +74,7 @@ KubeMedic end-to-end validation
   [PASS] the good image is serving again :: ticketbooking:1.0
 
 === 13. Audit record ===
-  [PASS] record written :: records\INC-20260830T103718-001.json
+  [PASS] record written :: records\INC-20260830T105551-001.json
   [PASS] record states the analysis source :: unavailable
   [PASS] record carries the rejection reason
   [PASS] record shows execution happened

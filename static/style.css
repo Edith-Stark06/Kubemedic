@@ -1,0 +1,169 @@
+/* KubeMedic minimal console. No framework, no build step -- open it and it works.
+   The visual job is to make the safety story legible at a glance: what is fact,
+   what is inference, what a human decided, and what was actually verified. */
+
+:root {
+  --bg: #0f1419;
+  --panel: #171d24;
+  --panel-2: #1e262f;
+  --line: #2a3541;
+  --text: #dbe4ec;
+  --muted: #8899a8;
+  --accent: #4a9eff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --inference: #a371f7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+header {
+  padding: 14px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+header h1 { margin: 0; font-size: 17px; letter-spacing: .3px; }
+header .sub { color: var(--muted); font-size: 12px; }
+header .spacer { flex: 1; }
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.panel.wide { grid-column: 1 / -1; }
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.row .k { color: var(--muted); }
+.row .v { text-align: right; word-break: break-all; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  letter-spacing: .4px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.badge.ok       { color: var(--ok);        border-color: #1e4620; }
+.badge.bad      { color: var(--bad);       border-color: #5c2320; }
+.badge.warn     { color: var(--warn);      border-color: #5c4413; }
+.badge.info     { color: var(--accent);    border-color: #1e3a5c; }
+.badge.inference{ color: var(--inference); border-color: #3d2a5c; }
+
+button {
+  font: inherit;
+  padding: 7px 13px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.primary { background: #143a5e; border-color: #1e5183; }
+button.danger  { background: #4a1d1a; border-color: #6e2b26; }
+
+textarea {
+  width: 100%;
+  min-height: 62px;
+  font: inherit;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+ul.plain li:last-child { border-bottom: 0; }
+
+.ticket .id { color: var(--accent); font-size: 12px; }
+.ticket .sig { color: var(--muted); font-size: 11.5px; }
+
+.hyp { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.hyp:last-child { border-bottom: 0; }
+.hyp .stmt { margin: 3px 0 5px; }
+.hyp .ev { color: var(--muted); font-size: 12px; margin-left: 14px; }
+.hyp .ev.against { color: var(--warn); }
+
+.basis { color: var(--muted); font-size: 12px; margin: 2px 0 2px 14px; }
+
+.muted { color: var(--muted); }
+.empty { color: var(--muted); padding: 8px 0; font-style: italic; }
+
+pre.log {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 12px;
+  margin: 0;
+}
+
+.note {
+  border-left: 3px solid var(--warn);
+  padding: 8px 12px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  border-radius: 0 4px 4px 0;
+}
+.note.safety { border-left-color: var(--ok); }
+
+#toast {
+  position: fixed;
+  right: 18px; bottom: 18px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  padding: 11px 15px;
+  border-radius: 4px;
+  max-width: 460px;
+  display: none;
+}
+#toast.bad { border-left-color: var(--bad); }
+#toast.ok  { border-left-color: var(--ok); }
+
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }

@@ -16,6 +16,7 @@ from mcp_server import db as db_module
 from mcp_server import tickets
 from mcp_server.watcher import (
     HEALTH_FAILING,
+    KIND_TAG,
     POD_NOT_READY,
     POD_RESTARTING,
     ROLLOUT_STALLED,
@@ -214,3 +215,67 @@ class TestTicketsAreObservationsNotDiagnoses:
             lowered = ticket.title.lower()
             for phrase in banned:
                 assert phrase not in lowered, f"{ticket.title!r} diagnoses"
+
+
+class TestDedupIsDataDrivenNotTitleParsing:
+    """
+    Dedup used to re-derive the anomaly kind by splitting the ticket title on
+    ':'. That holds until a deployment name or a detail string contains a
+    colon -- then dedup silently stops matching and the watcher re-files the
+    same anomaly on every poll. The kind is now carried in the signals.
+    """
+
+    def test_kind_is_recorded_in_signals(self, watcher, monkeypatch):
+        _cluster(monkeypatch, workload=_workload(0, 2, False))
+        watcher.check_once()
+        signals = tickets.list_tickets(status="open")[0].signals
+        assert any(s.startswith(KIND_TAG) for s in signals)
+
+    def test_dedup_survives_a_colon_in_the_deployment_name(self, monkeypatch):
+        awkward = KubeWatcher(deployment="ticket-booking:eu-west")
+        _cluster(monkeypatch, workload=_workload(0, 2, False))
+        first = awkward.check_once()
+        second = awkward.check_once()
+        assert len(first) == 1
+        assert second == [], "a colon in the name broke deduplication"
+
+    def test_old_untagged_tickets_still_deduplicate(self, watcher, monkeypatch):
+        """An upgrade must not re-file every anomaly that is already open."""
+        tickets.create_ticket(
+            title=f"{ROLLOUT_STALLED}: ticket-booking — 0/2 replicas ready",
+            severity="high", namespace="opspilot", deployment="ticket-booking",
+            service="ticket-booking", signals=["desired=2"],   # no kind tag
+        )
+        _cluster(monkeypatch, workload=_workload(0, 2, False))
+        assert watcher.check_once() == []
+
+
+class TestPassIsExplainable:
+    """
+    A bare "0 filed" is indistinguishable from a broken watcher. One dry run
+    reported zero while tickets existed, and the absence of any explanation is
+    what made it expensive to investigate.
+    """
+
+    def test_created_ids_match_the_tickets_actually_filed(self, watcher, monkeypatch):
+        _cluster(
+            monkeypatch, workload=_workload(0, 2, False), pods=[_pod()], health=_health()
+        )
+        before = {t.id for t in tickets.list_tickets(status="open")}
+        created = watcher.check_once()
+        after = {t.id for t in tickets.list_tickets(status="open")}
+        assert set(created) == after - before, (
+            "the returned ids must be exactly the tickets that were filed"
+        )
+
+    def test_last_pass_explains_a_zero(self, watcher, monkeypatch):
+        _cluster(monkeypatch, workload=_workload(0, 2, False))
+        watcher.check_once()
+        watcher.check_once()
+        assert watcher.last_pass["created"] == []
+        assert watcher.last_pass["skipped"] == [ROLLOUT_STALLED]
+        assert watcher.last_pass["observed"] == [ROLLOUT_STALLED]
+
+    def test_last_pass_records_a_healthy_cluster(self, watcher, monkeypatch):
+        _cluster(monkeypatch)
+        assert watcher.check_once() == []

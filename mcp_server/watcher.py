@@ -43,6 +43,9 @@ POD_NOT_READY = "Pod not ready"
 POD_RESTARTING = "Pod restarting repeatedly"
 HEALTH_FAILING = "Application health failing"
 
+# Prefix that records an anomaly kind inside a ticket's signals.
+KIND_TAG = "kind="
+
 RESTART_THRESHOLD = 3
 OPEN_STATUSES = (TicketStatus.open.value, TicketStatus.investigating.value)
 
@@ -57,6 +60,18 @@ class Anomaly:
 
     def title(self, deployment: str) -> str:
         return f"{self.kind}: {deployment} — {self.detail}"
+
+    def tagged_signals(self) -> list[str]:
+        """
+        Signals with the kind recorded explicitly.
+
+        Deduplication used to re-derive the kind by splitting the title on ':'.
+        That works until a deployment name or a detail string contains a colon,
+        at which point dedup silently stops matching and the watcher re-files
+        the same anomaly every poll. Carrying the kind as data removes the
+        guesswork.
+        """
+        return [f"{KIND_TAG}{self.kind}", *self.signals]
 
 
 class KubeWatcher:
@@ -73,6 +88,9 @@ class KubeWatcher:
         self.poll_interval = poll_interval
         self._running = False
         self._task = None
+        # What the most recent pass observed, filed and skipped. Read by the
+        # CLI so an operator can see why nothing was filed.
+        self.last_pass: dict = {}
 
     def start(self):
         if not self._running:
@@ -181,9 +199,18 @@ class KubeWatcher:
             for ticket in tickets.list_tickets(status=status):
                 if ticket.deployment != self.deployment:
                     continue
-                head = ticket.title.split(":", 1)[0].strip()
-                if head:
-                    existing.add(head)
+                tagged = [
+                    s[len(KIND_TAG):] for s in (ticket.signals or [])
+                    if s.startswith(KIND_TAG)
+                ]
+                if tagged:
+                    existing.update(tagged)
+                else:
+                    # Tickets filed before kinds were tagged. Keep reading them
+                    # so an upgrade does not re-file every open anomaly once.
+                    head = ticket.title.split(":", 1)[0].strip()
+                    if head:
+                        existing.add(head)
         return existing
 
     def check_once(self) -> list[str]:
@@ -196,18 +223,17 @@ class KubeWatcher:
         """
         anomalies = self.detect_anomalies()
         if not anomalies:
+            logger.info("[WATCHER] %s: no anomalies observed", self.deployment)
             return []
 
         already_open = self._open_kinds()
         created: list[str] = []
+        skipped: list[str] = []
         seen_this_pass: set[str] = set()
 
         for anomaly in anomalies:
             if anomaly.kind in already_open or anomaly.kind in seen_this_pass:
-                logger.debug(
-                    "Ticket already open for %r on %s, skipping",
-                    anomaly.kind, self.deployment,
-                )
+                skipped.append(anomaly.kind)
                 continue
             ticket = tickets.create_ticket(
                 title=anomaly.title(self.deployment),
@@ -215,12 +241,25 @@ class KubeWatcher:
                 namespace=self.namespace,
                 deployment=self.deployment,
                 service=self.service,
-                signals=anomaly.signals,
+                signals=anomaly.tagged_signals(),
             )
             created.append(ticket.id)
             seen_this_pass.add(anomaly.kind)
-            logger.info("Created ticket %s: %s", ticket.id, ticket.title)
+            logger.info("[WATCHER] filed %s: %s", ticket.id, ticket.title)
 
+        # Always say why, including when the answer is "nothing". A bare zero
+        # is indistinguishable from a broken watcher, which cost real time to
+        # investigate once already.
+        logger.info(
+            "[WATCHER] %s: %d anomaly(ies) observed, %d filed, %d already open %s",
+            self.deployment, len(anomalies), len(created), len(skipped),
+            sorted(set(skipped)) or "",
+        )
+        self.last_pass = {
+            "observed": [a.kind for a in anomalies],
+            "created": list(created),
+            "skipped": sorted(set(skipped)),
+        }
         return created
 
     # Retained for callers of the previous private name.

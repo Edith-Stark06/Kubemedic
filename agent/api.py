@@ -26,9 +26,12 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agent.adapters import collect_agent_evidence, tickets_to_references
@@ -64,6 +67,18 @@ app = FastAPI(
 
 # incident_id -> Incident
 _INCIDENTS: dict[str, Incident] = {}
+
+# Minimal operator console, served from this same process so there is exactly
+# one thing to start when checking the system. static/ is plain HTML, CSS and
+# JavaScript -- no build step, no framework, and nothing to install.
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+if _STATIC.is_dir():
+    app.mount("/ui", StaticFiles(directory=str(_STATIC), html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui/")
 
 
 # ---------------------------------------------------------------------------

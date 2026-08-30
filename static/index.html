@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KubeMedic — Incident Console</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+
+<header>
+  <h1>KubeMedic</h1>
+  <span class="sub">evidence &rarr; IBM Bob &rarr; human review &rarr; verified remediation</span>
+  <span class="spacer"></span>
+  <span class="sub">engine <span id="provider" class="badge info">…</span></span>
+  <span class="sub">cluster <span id="cluster-badge" class="badge">…</span></span>
+</header>
+
+<main>
+
+  <section class="panel">
+    <h2>Workload</h2>
+    <div id="workload"><div class="empty">loading…</div></div>
+    <div class="actions">
+      <button id="btn-refresh">Refresh</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Reasoning engine</h2>
+    <div id="providers"><div class="empty">loading…</div></div>
+    <div class="note" style="margin-top:10px">
+      The engine is a configuration choice. When it cannot be reached the system
+      reports <strong>BOB_UNAVAILABLE</strong> and builds no plan — it does not
+      invent a diagnosis.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Open tickets</h2>
+    <ul class="plain" id="tickets"><li class="empty">none</li></ul>
+  </section>
+
+  <section class="panel">
+    <h2>Incidents</h2>
+    <ul class="plain" id="incidents"><li class="empty">none yet</li></ul>
+    <div class="actions">
+      <button id="btn-detect" class="primary">Collect evidence &amp; correlate</button>
+    </div>
+  </section>
+
+  <section class="panel wide" id="detail-panel" hidden>
+    <h2>Incident <span id="d-id"></span> <span id="d-state" class="badge"></span></h2>
+
+    <div id="d-correlation"></div>
+    <div id="d-analysis"></div>
+    <div id="d-plan"></div>
+
+    <div id="d-review" hidden>
+      <h2 style="margin-top:16px">Human final review</h2>
+      <div class="note safety">
+        Approval may be direct. <strong>A rejection must state why</strong> — the
+        server returns <code>400 feedback_required</code> otherwise, whatever this
+        page allows. The reason becomes context for the revised plan.
+      </div>
+      <textarea id="d-feedback" placeholder="Reason for rejection — required to reject, ignored on approve"></textarea>
+      <div class="actions">
+        <button id="btn-approve" class="primary">Approve</button>
+        <button id="btn-reject" class="danger">Reject</button>
+        <button id="btn-revise">Ask for a revised plan</button>
+        <button id="btn-execute">Execute &amp; verify</button>
+      </div>
+    </div>
+
+    <div id="d-feedback-history"></div>
+    <div id="d-execution"></div>
+    <div id="d-verification"></div>
+
+    <h2 style="margin-top:16px">Audit trail</h2>
+    <pre class="log" id="d-audit"></pre>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
