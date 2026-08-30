@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Literal
 
@@ -460,14 +461,71 @@ def limits() -> dict[str, Any]:
     }
 
 
+def _port_holder(host: str, port: int) -> int | None:
+    """
+    The pid already listening on this port, if any.
+
+    uvicorn's own message for a taken port is a bare WinError 10048 printed
+    *after* "Application startup complete", which reads as though the server
+    started and then something unrelated broke. Naming the process turns that
+    into an instruction.
+    """
+    import socket
+    import subprocess
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.4)
+        if probe.connect_ex((host, port)) != 0:
+            return None                      # nothing listening
+
+    try:
+        if sys.platform == "win32":
+            out = subprocess.run(
+                ["netstat", "-ano"], capture_output=True, text=True, timeout=10
+            ).stdout
+            for line in out.splitlines():
+                if f":{port} " in line and "LISTENING" in line:
+                    return int(line.split()[-1])
+        else:
+            out = subprocess.run(
+                ["lsof", "-ti", f"tcp:{port}"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            if out:
+                return int(out.splitlines()[0])
+    except Exception:
+        pass
+    return -1                                # busy, holder unknown
+
+
 def main() -> None:  # pragma: no cover
     import uvicorn
 
-    uvicorn.run(
-        app,
-        host=os.getenv("KUBEMEDIC_API_HOST", "127.0.0.1"),
-        port=int(os.getenv("KUBEMEDIC_API_PORT", "8100")),
-    )
+    host = os.getenv("KUBEMEDIC_API_HOST", "127.0.0.1")
+    port = int(os.getenv("KUBEMEDIC_API_PORT", "8100"))
+
+    holder = _port_holder(host, port)
+    if holder is not None:
+        who = f"process {holder}" if holder > 0 else "another process"
+        kill = (
+            f"Stop-Process -Id {holder} -Force" if sys.platform == "win32"
+            else f"kill {holder}"
+        )
+        lines = [
+            f"Port {port} is already in use by {who}.",
+            "",
+            f"  Stop it:         {kill}",
+            f"  Or use another:  KUBEMEDIC_API_PORT=8101 python -m agent.api",
+            "",
+            "If that is an older KubeMedic server, the console it serves is",
+            "running the code it was started with, not the code on disk.",
+        ]
+        print("\n".join(lines), file=sys.stderr)
+        raise SystemExit(1)
+
+    print(f"KubeMedic console  ->  http://{host}:{port}/ui/")
+    print(f"KubeMedic API      ->  http://{host}:{port}/docs")
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":  # pragma: no cover
