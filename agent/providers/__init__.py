@@ -131,27 +131,35 @@ def provider_status() -> dict[str, Any]:
     _register()
     from agent.secrets import get_secrets
 
-    saved = (_active, _active_name)
+    saved_provider, saved_name = _active, _active_name
     entries = []
     try:
         for known in provider_names():
             try:
-                reset_provider_cache()
-                usage = get_provider(known).usage()
+                if saved_provider is not None and known == saved_name:
+                    # Report the live instance, not a fresh one. Constructing a
+                    # new provider here would zero the call and failure
+                    # counters this endpoint exists to surface.
+                    usage = saved_provider.usage()
+                else:
+                    reset_provider_cache()
+                    usage = get_provider(known).usage()
                 # The registry key, not the provider id. `manual` reports its
                 # id as ibm-bob -- the analysis really is Bob's -- so without
-                # this the status list shows ibm-bob twice.
+                # this the status list would show ibm-bob twice.
                 usage["name"] = known
+                usage["active"] = known == (saved_name or configured_provider_name())
                 entries.append(usage)
             except Exception as exc:        # status must never raise
                 entries.append({
                     "name": known,
                     "provider": known,
                     "configured": False,
+                    "active": False,
                     "detail": f"could not construct: {exc}",
                 })
     finally:
-        globals()["_active"], globals()["_active_name"] = saved
+        globals()["_active"], globals()["_active_name"] = saved_provider, saved_name
 
     return {
         "active": configured_provider_name(),

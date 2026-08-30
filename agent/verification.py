@@ -11,6 +11,8 @@ Rules:
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -145,3 +147,80 @@ def verify(
     incident.transition(new_state)
     log.info("[VERIFY] outcome=%s signals=%s", outcome, [s.name for s in signals])
     return incident, result
+
+
+# ---------------------------------------------------------------------------
+# Settling before verification
+# ---------------------------------------------------------------------------
+
+DEFAULT_SETTLE_TIMEOUT_S = 90
+DEFAULT_SETTLE_INTERVAL_S = 5
+
+
+def _settle_window() -> tuple[int, int]:
+    """
+    Read at call time, not import time, so a test (or an operator) can shorten
+    the window without reloading the module. A suite that inherits a 90s wait
+    stops being a suite.
+    """
+    return (
+        int(os.getenv("KUBEMEDIC_SETTLE_TIMEOUT_SECONDS", DEFAULT_SETTLE_TIMEOUT_S)),
+        int(os.getenv("KUBEMEDIC_SETTLE_INTERVAL_SECONDS", DEFAULT_SETTLE_INTERVAL_S)),
+    )
+
+
+def wait_for_recovery(
+    reader: EvidenceReader,
+    target: str,
+    namespace: str,
+    timeout_s: int | None = None,
+    interval_s: int | None = None,
+) -> tuple[bool, str]:
+    """
+    Give the cluster a bounded window to converge before verifying.
+
+    A rollback returns the moment the API server accepts the patch, but the
+    controller then takes tens of seconds to replace pods. Verifying
+    immediately reports FAIL on a remediation that is working -- which is worse
+    than useless, because it teaches a reviewer to distrust a signal that is
+    usually right.
+
+    This does NOT soften the outcome. It waits for the rollout to report
+    healthy, and if the window expires it returns anyway and lets verify()
+    report exactly what it finds. A remediation that has not converged in the
+    window has genuinely not converged.
+
+    Returns (settled, detail) for the audit trail, so a record shows whether
+    the verdict came from a settled cluster or an expired wait.
+    """
+    env_timeout, env_interval = _settle_window()
+    timeout_s = env_timeout if timeout_s is None else timeout_s
+    interval_s = env_interval if interval_s is None else interval_s
+
+    deadline = time.monotonic() + max(0, timeout_s)
+    last = "no reading taken"
+    attempts = 0
+
+    while True:
+        attempts += 1
+        try:
+            status = reader.get_workload_status(target, namespace)
+            last = (
+                f"ready={status.get('ready')} "
+                f"updated={status.get('updated_replicas')} "
+                f"desired={status.get('desired_replicas')}"
+            )
+            if status.get("ready"):
+                elapsed = int(timeout_s - max(0, deadline - time.monotonic()))
+                return True, f"settled after ~{elapsed}s ({attempts} checks): {last}"
+        except Exception as exc:
+            # A read failure during settling is not a verdict. verify() will
+            # make the call, and an error there becomes INCONCLUSIVE.
+            last = f"read failed: {exc}"
+
+        if time.monotonic() >= deadline:
+            return False, (
+                f"did not settle within {timeout_s}s ({attempts} checks); "
+                f"last reading: {last}"
+            )
+        time.sleep(min(interval_s, max(0, deadline - time.monotonic())))

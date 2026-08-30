@@ -44,7 +44,7 @@ from agent.models import (
 )
 from agent.pipeline import plan_remediation, request_revision
 from agent.reasoning import run_analysis
-from agent.verification import verify
+from agent.verification import verify, wait_for_recovery
 
 log = logging.getLogger("kubemedic.api")
 
@@ -333,6 +333,21 @@ def execute_incident(
 
     verification = None
     if result.success:
+        # Give the cluster a bounded window to converge first. A rollback
+        # returns as soon as the API server accepts the patch, but the
+        # controller takes tens of seconds to replace pods -- verifying
+        # immediately reports FAIL on a remediation that is working, which
+        # teaches a reviewer to distrust a signal that is usually right.
+        #
+        # This does not soften the verdict: if the window expires, verify()
+        # still reports exactly what it finds.
+        settled, detail = wait_for_recovery(
+            cluster, incident.plan.target,
+            incident.evidence.namespace if incident.evidence else "default",
+        )
+        incident.audit_log.append(
+            {"step": "settle", "settled": settled, "detail": detail}
+        )
         incident, verification = verify(incident, cluster)
 
     record_path = write_record(incident)

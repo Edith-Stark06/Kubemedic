@@ -270,3 +270,47 @@ class TestUsageAccounting:
         rendered = json.dumps(result.invocation)
         assert "supersecretkey123456" not in rendered
         assert "ticket-booking" not in rendered   # the prompt carries cluster detail
+
+
+class TestStatusPreservesCounters:
+    """
+    Regression: provider_status() reset the registry cache while building its
+    listing, constructing a fresh instance of the active provider and zeroing
+    the very call and failure counters the endpoint exists to surface. A dry
+    run showed the endpoint reporting an idle provider immediately after two
+    successful calls.
+    """
+
+    def test_active_provider_counters_survive_a_status_call(self, monkeypatch):
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "anthropic")
+        monkeypatch.setenv("KUBEMEDIC_ANTHROPIC_API_KEY", "k")
+        monkeypatch.setattr(
+            AnthropicProvider, "_invoke", lambda self, p: json.dumps(VALID_ANALYSIS)
+        )
+        reset_provider_cache()
+        provider = get_provider()
+        provider.analyze(EVIDENCE, TICKETS)
+        provider.analyze(EVIDENCE, TICKETS)
+
+        entry = next(
+            e for e in provider_status()["providers"] if e["name"] == "anthropic"
+        )
+        assert entry["calls"] == 2
+        assert entry["successes"] == 2
+        assert entry["active"] is True
+
+    def test_status_does_not_disturb_the_active_provider(self, monkeypatch):
+        """Reading status must not swap the engine out from under an incident."""
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "watsonx")
+        reset_provider_cache()
+        before = get_provider()
+        provider_status()
+        assert get_provider() is before
+
+    def test_exactly_one_provider_is_marked_active(self, monkeypatch):
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "watsonx")
+        reset_provider_cache()
+        get_provider()
+        actives = [e for e in provider_status()["providers"] if e.get("active")]
+        assert len(actives) == 1
+        assert actives[0]["name"] == "watsonx"
