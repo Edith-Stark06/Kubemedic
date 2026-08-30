@@ -1,50 +1,46 @@
-# SHIVRAJ_DOCS
+# Owner notes
 
-Shivraj's working directory: the next actions, the handoffs, and the drafts of
-the deliverables I own.
+The hackathon is over. This project has a single owner: **Shivraj Rajasekaran**.
 
-Project documentation lives in [`docs/`](../docs/) — that describes the system.
-This describes what still has to happen before 19:30 IST today.
+Everything here is forward-looking. The team-allocation layer — per-person
+handoffs, cross-owner blocking requests, submission-deadline checklists — has
+been removed; it described a three-person sprint that no longer exists. It is
+in git history if it is ever wanted.
 
-| File | What it is | Read when |
-|---|---|---|
-| [`00_NEXT_TODO.md`](00_NEXT_TODO.md) | **Start here.** Time-boxed action list to the deadline | Now |
-| [`01_MERGE_AND_RELEASE.md`](01_MERGE_AND_RELEASE.md) | Merge `ramana` to `main`, PR body, branch protection, secret sweep, fresh-clone test, tag | Tonight |
-| [`02_BOB_REPORT_EXPORT.md`](02_BOB_REPORT_EXPORT.md) | `SUB-003` — the exported IBM Bob report the rules require | Morning |
-| [`03_SUBMISSION_CHECKLIST.md`](03_SUBMISSION_CHECKLIST.md) | All four deliverables, compliance status, what to claim and what not to | Throughout |
-| [`04_HANDOFF_VERONA.md`](04_HANDOFF_VERONA.md) | API reference for the dashboard; paste-ready chat message | Send tonight |
-| [`05_HANDOFF_RAMANA.md`](05_HANDOFF_RAMANA.md) | `BOB-001` and the statements; paste-ready chat message | Send tonight |
-| [`06_DEMO_SCRIPT.md`](06_DEMO_SCRIPT.md) | `SUB-004` — video script, two versions, with narration | Before recording |
-| [`07_WORK_INSIDE_IBM_BOB.md`](07_WORK_INSIDE_IBM_BOB.md) | What must be done in the Bob application itself — the part no code can do | Background |
-| [`08_BOB_RUNBOOK.md`](08_BOB_RUNBOOK.md) | **Copy-paste prompts. Three sessions, ~90 min, finishes every Bob-dependent deliverable.** | **Start here in the morning** |
-| [`SUB-001_PROBLEM_AND_SOLUTION.md`](SUB-001_PROBLEM_AND_SOLUTION.md) | Draft, ready for review | Ramana reviews |
-| [`SUB-002_HOW_WE_USED_IBM_BOB.md`](SUB-002_HOW_WE_USED_IBM_BOB.md) | Draft with two variants — pick after `BOB-001` | Ramana reviews |
+| File | What it is |
+|---|---|
+| [`01_IBM_BOB_SETUP.md`](01_IBM_BOB_SETUP.md) | What has to be done inside the IBM Bob application, and why the API path is still unresolved |
+| [`02_BOB_RUNBOOK.md`](02_BOB_RUNBOOK.md) | Copy-paste prompts for running an incident through Bob interactively |
+| [`03_ROADMAP.md`](03_ROADMAP.md) | The remaining engineering work, in dependency order |
+
+Project documentation is in [`docs/`](../docs/) — that describes the system as
+built. `docs/23_SYSTEM_WORKFLOW.md` is the entry point.
 
 ---
 
-## Where the project actually is
+## Current state
 
-**Code: done.** 206 tests pass. `bash scripts/validate.sh` passes every check
-against the live cluster — real failure injected, real tickets correlated, an
-unapproved execution refused with the cluster asserted unchanged, a reasonless
-rejection refused, a real rollback executed, recovery verified on two
-independent signals, audit record written.
+`main` is the only branch that matters. 351 tests pass. The end-to-end loop is
+verified against a live k3s cluster and reproducible without one via
+`python scripts/dry_run.py`.
 
-**Two things are not done, and neither is code:**
+**Working:** MCP evidence layer, ticket generation, many-to-one correlation,
+human review with mandatory rejection feedback, the feedback-to-revision loop,
+allowlisted remediation through the Kubernetes API, dual-signal verification,
+audit records, the operator console, the CLI, and a pluggable reasoning layer
+with a runtime engine switch.
 
-1. **IBM Bob has never returned a live analysis.** No credentials. `BOB-001`,
-   Ramana's.
-2. **The dashboard still fabricates verification results.** `DASH-001`,
-   Verona's.
+**Not working, and why:**
 
-**The four required deliverables** — video, problem/solution statements, Bob
-utilisation statement, and the exported Bob report — are what the entry is
-actually judged on. Two are drafted here; two are not started.
+| Engine | Blocker |
+|---|---|
+| IBM watsonx | The `KUBEMEDIC` project has no runtime associated. The active WML instance is `8f0fcd06`; the two projects that *are* associated point at Inactive instances. One console step from working — see `01_IBM_BOB_SETUP.md` |
+| IBM Bob | Endpoint unresolved. `cloud.manufact.com` returns 401 on every path, `bob.ibm.com` serves 404 HTML. The base URL came from the IDE's `extension.js` and was never confirmed |
+| Gemini | Works. Free-tier quota is 20 requests, so it rate-limits under repeated demo runs |
 
----
+## A note on the submission record
 
-## If you read one thing
-
-`00_NEXT_TODO.md`, Block A. Five tasks, thirty minutes, all of them unblock
-someone else. Then sleep — the video and the Bob statement both get worse when
-written tired, and there is time for them in the morning.
+`submission/` describes an entry that was made, including who wrote which part.
+That is a historical record, not a work assignment, and it stays accurate
+regardless of who owns the project now. Changing ownership going forward does
+not change who did what.

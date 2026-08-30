@@ -1,4 +1,7 @@
-# Upcoming TODOs
+# Roadmap
+
+Remaining engineering work, in dependency order. Single owner — the per-person
+allocation is gone with the hackathon.
 
 Two horizons. **Part 1 is today, before 19:30 IST.** Part 2 is the
 provider/vault architecture we discussed — a real workstream, and deliberately
