@@ -1,29 +1,102 @@
 # Shivraj — Next TODO
 
-**Written:** 2026-08-30 00:34 IST · **Deadline:** 2026-08-30 10:00 ET =
-**19:30 IST today** · **~18.9 hours left**
-
-You are awake at half past midnight with a deadline this evening. The honest
-plan assumes you sleep. Everything below is ordered so that if you stop at any
-point, what you have already done is still the most valuable thing you could
-have done by then.
-
-**Your code work is finished.** 206 tests pass, `bash scripts/validate.sh`
-passes every check against the live cluster, and the branch is pushed.
-Everything left is coordination, packaging and the four deliverables the rules
-actually name.
+**Updated:** 2026-08-30 06:45 IST · **Deadline:** 10:00 ET = **19:30 IST today**
 
 ---
 
-## The one-line summary of where the project is
+## DONE since this list was written
 
-The system works and is provably safe; **IBM Bob has never once reasoned**, and
-the only screen a judge would click is still fake. Those two facts are the
-entire remaining risk.
+Blocks A, B and most of D are complete. `main` is now the real trunk at
+`d3d91a1`.
+
+| | |
+|---|---|
+| A3 · `ramana` merged to `main` | done |
+| A3 · `shivraj/mcp-repo-ci` merged | done |
+| A3 · **`verona` merged** | done — 8 conflicts resolved, 3 were real decisions |
+| B3 · Secret sweep, full history | clean — no credentials, no ignored files tracked, no local paths |
+| D1 · `pytest` on `main` | **228 passed** |
+| D1 · `validate.sh` on `main` | **29 assertions, 0 failures**, live k3s |
+| D2 · Fresh-clone test | 140 files, 228 pass, all imports ok |
+| D4 · `submission/` assembled | evidence captured, statements moved in |
+
+### Three bugs found and fixed during the merge
+
+1. **Verona's Dockerfile had no `ARG`**, so `--build-arg HEALTHY=false` was
+   ignored and `ticketbooking:1.1` was built healthy. The incident injection
+   would have reported success and changed nothing — a demo that appears to
+   work and proves nothing. Fixed and re-verified by inspecting the images.
+2. **`RealAdapter` never awaited its httpx calls.** The moment
+   `KUBEMEDIC_AGENT_BASE_URL` is set, the dashboard would have died on an
+   `AttributeError`. It survived because only `MockAdapter` was ever tested.
+   Fixed, plus 7 integration tests that run the real seam.
+3. **The workload arrived twice** (my `app.py`, Verona's `main.py`). Kept
+   Verona's, deleted mine, moved the manifests to port 8001 and readiness on
+   `/ready`, rebuilt both images, re-ran the whole loop. Passes.
 
 ---
 
-## Block A — tonight, before you sleep (30 minutes, do not skip)
+## STILL OPEN — and this is now the whole list
+
+### In IBM Bob — yours, see `07_WORK_INSIDE_IBM_BOB.md`
+
+- [ ] **B1 · Run a real incident analysis in Bob using our MCP server.**
+  Highest value remaining. Does not need the API key.
+- [ ] **B2 · Export the Bob report** into `submission/bob-report/` —
+  required deliverable, scaffolded and waiting.
+- [ ] **B3 · Bob API credentials** — optional now that B1 exists. Stop at 11:00.
+- [ ] **B4 · Screenshot the asset pack loading.**
+- [ ] **B5 · Run `KubeMedic Auditor` against the submission.** Optional.
+
+### Team
+
+- [ ] **A1 · Send the handoffs** — `04_HANDOFF_VERONA.md`, `05_HANDOFF_RAMANA.md`.
+  Verona's needs updating: their branch is merged, and they should know about
+  the two bugs found in it.
+- [ ] **C2 · Ramana reviews** `submission/PROBLEM_AND_SOLUTION.md` and
+  `submission/HOW_WE_USED_IBM_BOB.md`, and **picks the section 4 variant**.
+- [ ] **C3 · Record the video** — `06_DEMO_SCRIPT.md`. Version A is now viable:
+  the dashboard is real and wired to the agent.
+
+### Final
+
+- [ ] **A5 · Confirm the deadline, the portal, and whether the repo must be public.**
+- [ ] **D3 · Tag `v1.0-submission`** — after the Bob report lands, not before.
+- [ ] **D5 · Submit** by 16:00 IST.
+
+---
+
+## What changed about the demo
+
+Version A of the video is now possible. Verona's incident console is on `main`,
+the seam to the agent API works and is tested, and rejection-with-reason is
+enforced end to end. Start the two processes:
+
+```bash
+python -m agent.api                                    # :8100
+KUBEMEDIC_AGENT_BASE_URL=http://127.0.0.1:8100 python -m dashboard.app
+```
+
+**Verified working, 2026-08-30 06:45 IST**, both processes up against the live
+cluster:
+
+```
+inject_incident.sh          -> rollout stalls
+watcher                     -> 2 tickets filed
+POST :8100/api/incidents    -> INC-20260830T064504-001, 2 tickets correlated
+GET  :8200/api/incidents    -> dashboard sees it through RealAdapter over HTTP
+GET  :8200/                 -> HTTP 200, "KubeMedic - Incident Console"
+```
+
+State showed `BOB_UNAVAILABLE`, correctly — no Bob credentials. Verona should
+confirm that state renders legibly before filming; it is the state the demo
+will be in unless `B1` or `B3` lands.
+
+---
+
+## Original plan, kept for reference
+
+## Block A — tonight (superseded: A3 done)
 
 These are all unblocking-other-people tasks. They cost minutes and they let
 Ramana and Verona start the moment they wake up.
