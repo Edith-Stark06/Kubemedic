@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -93,6 +94,9 @@ def get_cluster():
     Imported lazily: the API must be importable, and its contract testable,
     on a machine with no kubeconfig.
     """
+    if _DEMO["active"] and _DEMO["cluster"] is not None:
+        return _DEMO["cluster"]
+
     from agent.k8s_client import LiveCluster
 
     return LiveCluster()
@@ -189,6 +193,30 @@ def health() -> dict[str, Any]:
 @app.get("/api/cluster")
 def cluster_status() -> dict[str, Any]:
     """Live cluster state. Never a canned response — if it cannot be read, it says so."""
+    if _DEMO["active"]:
+        cluster = _DEMO["cluster"]
+        status = cluster.get_workload_status("ticket-booking", "opspilot")
+        return {
+            "reachable": True,
+            "demo": True,
+            "detail": "deterministic fixture cluster (demo mode)",
+            "workload": {
+                "name": cluster.deployment, "image": cluster.image,
+                "revision": str(cluster.current_revision),
+                "ready_replicas": status["ready_replicas"],
+                "desired_replicas": status["desired_replicas"],
+                "rollout_complete": status["rollout_complete"],
+            },
+            "application_health": cluster.get_application_health(
+                "ticket-booking", "opspilot"),
+            "pods": [
+                {"name": "ticket-booking-7d6b9-new", "ready": cluster.healthy,
+                 "image": cluster.image},
+                {"name": "ticket-booking-5594-old", "ready": True,
+                 "image": "ticketbooking:1.0"},
+            ],
+        }
+
     from agent.k8s_client import is_cluster_reachable
 
     reachable, detail = is_cluster_reachable()
@@ -209,9 +237,92 @@ def cluster_status() -> dict[str, Any]:
         return {"reachable": False, "detail": f"evidence collection failed: {exc}"}
 
 
+# ---------------------------------------------------------------------------
+# Demo mode
+#
+# The console must be usable without a Kubernetes cluster -- on a judge's
+# laptop, in CI, or when the cluster is simply not up. Demo mode swaps the live
+# cluster for the deterministic fixture from scripts/dry_run.py.
+#
+# The fixture is the *cluster*, not the logic: correlation, the approval gate,
+# the executor allowlist, the verifier and the audit trail are the real code
+# paths, and the reasoning provider is whichever one is configured. Only the
+# thing being observed and mutated is simulated, and it behaves rather than
+# agrees -- a rollback to a revision that does not exist fails, and a restart
+# does not recover the service.
+# ---------------------------------------------------------------------------
+
+_DEMO: dict[str, Any] = {"active": False, "cluster": None}
+
+
+def _fixture_cluster():
+    from scripts.dry_run import FixtureCluster
+
+    return FixtureCluster()
+
+
+@app.get("/api/demo")
+def demo_status() -> dict[str, Any]:
+    from agent.k8s_client import is_cluster_reachable
+
+    reachable, detail = is_cluster_reachable()
+    return {
+        "demo_active": _DEMO["active"],
+        "live_cluster_reachable": reachable,
+        "live_cluster_detail": detail,
+        "note": (
+            "Demo mode uses a deterministic fixture cluster. Correlation, the "
+            "approval gate, the executor and the verifier are the real ones."
+        ),
+    }
+
+
+@app.post("/api/demo/start")
+def demo_start() -> dict[str, Any]:
+    """
+    Reset the fixture to the broken state and file the three tickets a watcher
+    would file. Returns nothing that has been reasoned about yet -- creating
+    the incident is still POST /api/incidents.
+    """
+    from scripts.dry_run import seed_tickets
+
+    _DEMO["active"] = True
+    _DEMO["cluster"] = _fixture_cluster()
+    _INCIDENTS.clear()
+
+    tickets = seed_tickets(datetime.now(timezone.utc))
+    _DEMO["tickets"] = tickets
+    log.info("[DEMO] fixture reset, %d ticket(s) seeded", len(tickets))
+    return {
+        "demo_active": True,
+        "tickets": [
+            {"id": t.ticket_id, "title": t.title, "severity": t.severity,
+             "symptom": t.reported_symptom}
+            for t in tickets
+        ],
+        "workload": _DEMO["cluster"].get_workload_status("ticket-booking", "opspilot"),
+    }
+
+
+@app.post("/api/demo/stop")
+def demo_stop() -> dict[str, Any]:
+    _DEMO.update({"active": False, "cluster": None, "tickets": []})
+    _INCIDENTS.clear()
+    return {"demo_active": False}
+
+
 @app.get("/api/tickets")
 def list_tickets(status: str | None = None) -> list[dict[str, Any]]:
     """Real tickets from the store. No fabrication."""
+    if _DEMO["active"]:
+        return [
+            {"id": t.ticket_id, "title": t.title, "status": "open",
+             "severity": t.severity or "high", "deployment": t.named_workload,
+             "signals": [t.reported_symptom or ""],
+             "created_at": t.created_at.isoformat() if t.created_at else None}
+            for t in _DEMO.get("tickets", [])
+        ]
+
     from mcp_server import tickets as ticket_store
 
     return [t.model_dump(mode="json") for t in ticket_store.list_tickets(status=status)]
@@ -229,19 +340,26 @@ def create_incident(body: CreateIncidentRequest) -> IncidentSummary:
     Stops at PENDING_APPROVAL. It does not execute, and it never advances past
     BOB_UNAVAILABLE — an incident with no analysis gets no plan.
     """
-    from mcp_server import tickets as ticket_store
+    if _DEMO["active"]:
+        from scripts.dry_run import collect_evidence
 
-    try:
-        evidence = collect_agent_evidence(
-            body.namespace, body.deployment, body.service
+        evidence = collect_evidence(_DEMO["cluster"])
+        references = list(_DEMO.get("tickets", []))
+    else:
+        from mcp_server import tickets as ticket_store
+
+        try:
+            evidence = collect_agent_evidence(
+                body.namespace, body.deployment, body.service
+            )
+        except Exception as exc:
+            raise HTTPException(
+                503, detail=f"Evidence collection failed: {exc}"
+            ) from exc
+
+        references = tickets_to_references(
+            ticket_store.list_tickets(status=body.ticket_status)
         )
-    except Exception as exc:
-        raise HTTPException(
-            503, detail=f"Evidence collection failed: {exc}"
-        ) from exc
-
-    stored = ticket_store.list_tickets(status=body.ticket_status)
-    references = tickets_to_references(stored)
 
     incident, excluded = correlate(references, evidence)
     log.info(

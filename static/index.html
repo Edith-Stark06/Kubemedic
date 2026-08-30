@@ -9,78 +9,131 @@
 <body>
 
 <header>
-  <h1>KubeMedic</h1>
-  <span class="sub">evidence &rarr; IBM Bob &rarr; human review &rarr; verified remediation</span>
-  <span class="spacer"></span>
-  <span class="sub">engine <span id="provider" class="badge info">…</span></span>
-  <span class="sub">cluster <span id="cluster-badge" class="badge">…</span></span>
+  <div class="bar">
+    <h1 class="brand"><span class="dot" id="brand-dot"></span> KubeMedic</h1>
+    <span class="tagline">evidence &rarr; reasoning &rarr; human review &rarr; verified remediation</span>
+    <span class="spacer"></span>
+    <span class="pill">engine <b id="provider">…</b></span>
+    <span class="pill">cluster <b id="cluster-badge">…</b></span>
+    <button id="btn-refresh">Refresh</button>
+  </div>
 </header>
 
 <main>
 
-  <section class="panel">
-    <h2>Workload</h2>
-    <div id="workload"><div class="empty">loading…</div></div>
-    <div class="actions">
-      <button id="btn-refresh">Refresh</button>
+  <!-- lifecycle rail -->
+  <section class="card col-12">
+    <div class="head"><h2>Lifecycle</h2><span class="spacer"></span>
+      <span class="muted" id="stage-note">not started</span></div>
+    <div class="body">
+      <div class="steps" id="steps"></div>
     </div>
   </section>
 
-  <section class="panel">
-    <h2>Reasoning engine</h2>
-    <div id="providers"><div class="empty">loading…</div></div>
-    <div class="note" style="margin-top:10px">
-      The engine is a configuration choice. When it cannot be reached the system
-      reports <strong>BOB_UNAVAILABLE</strong> and builds no plan — it does not
-      invent a diagnosis.
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2>Open tickets</h2>
-    <ul class="plain" id="tickets"><li class="empty">none</li></ul>
-  </section>
-
-  <section class="panel">
-    <h2>Incidents</h2>
-    <ul class="plain" id="incidents"><li class="empty">none yet</li></ul>
-    <div class="actions">
-      <button id="btn-detect" class="primary">Collect evidence &amp; correlate</button>
-    </div>
-  </section>
-
-  <section class="panel wide" id="detail-panel" hidden>
-    <h2>Incident <span id="d-id"></span> <span id="d-state" class="badge"></span></h2>
-
-    <div id="d-correlation"></div>
-    <div id="d-analysis"></div>
-    <div id="d-plan"></div>
-
-    <div id="d-review" hidden>
-      <h2 style="margin-top:16px">Human final review</h2>
-      <div class="note safety">
-        Approval may be direct. <strong>A rejection must state why</strong> — the
-        server returns <code>400 feedback_required</code> otherwise, whatever this
-        page allows. The reason becomes context for the revised plan.
-      </div>
-      <textarea id="d-feedback" placeholder="Reason for rejection — required to reject, ignored on approve"></textarea>
+  <!-- demo control -->
+  <section class="card col-4">
+    <div class="head"><h2>Demo</h2></div>
+    <div class="body">
+      <div id="demo-state"><div class="empty">checking…</div></div>
       <div class="actions">
-        <button id="btn-approve" class="primary">Approve</button>
-        <button id="btn-reject" class="danger">Reject</button>
-        <button id="btn-revise">Ask for a revised plan</button>
-        <button id="btn-execute">Execute &amp; verify</button>
+        <button id="btn-demo-start" class="primary">Start dry run</button>
+        <button id="btn-demo-stop">Use live cluster</button>
+      </div>
+      <div class="note">
+        The dry run uses a deterministic fixture cluster, so no Kubernetes is
+        needed. Correlation, the approval gate, the executor and the verifier
+        are the real ones — only the cluster is simulated.
       </div>
     </div>
+  </section>
 
-    <div id="d-feedback-history"></div>
-    <div id="d-execution"></div>
-    <div id="d-verification"></div>
+  <section class="card col-4">
+    <div class="head"><h2>Workload</h2></div>
+    <div class="body" id="workload"><div class="empty">loading…</div></div>
+  </section>
 
-    <h2 style="margin-top:16px">Audit trail</h2>
-    <pre class="log" id="d-audit"></pre>
+  <section class="card col-4">
+    <div class="head"><h2>Reasoning engine</h2></div>
+    <div class="body" id="providers"><div class="empty">loading…</div></div>
+  </section>
+
+  <section class="card col-6">
+    <div class="head"><h2>Open tickets</h2><span class="spacer"></span>
+      <span class="badge grey" id="ticket-count">0</span></div>
+    <div class="body"><ul class="plain" id="tickets"><li class="empty">none</li></ul></div>
+  </section>
+
+  <section class="card col-6">
+    <div class="head"><h2>Incidents</h2></div>
+    <div class="body">
+      <ul class="plain" id="incidents"><li class="empty">none yet</li></ul>
+      <div class="actions">
+        <button id="btn-detect" class="primary">Collect evidence &amp; correlate</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- incident detail -->
+  <section class="card col-12" id="detail-card" hidden>
+    <div class="head">
+      <h2>Incident</h2>
+      <span class="tid" id="d-id"></span>
+      <span class="spacer"></span>
+      <span class="badge" id="d-state"></span>
+    </div>
+    <div class="body">
+      <div id="d-correlation"></div>
+      <div id="d-analysis"></div>
+      <div id="d-plan"></div>
+      <div id="d-feedback-history"></div>
+      <div id="d-execution"></div>
+      <div id="d-verification"></div>
+
+      <div id="d-review" hidden>
+        <div class="note safe">
+          Approval may be direct. <strong>A rejection must state why</strong> — the
+          server returns <code>400 feedback_required</code> otherwise, whatever
+          this page allows. The reason becomes context for the revised plan.
+        </div>
+        <div class="actions">
+          <button id="btn-approve" class="success">Approve</button>
+          <button id="btn-reject" class="danger">Reject…</button>
+          <button id="btn-revise">Ask for a revised plan</button>
+          <button id="btn-execute" class="primary">Execute &amp; verify</button>
+        </div>
+      </div>
+
+      <details style="margin-top:16px">
+        <summary class="muted" style="cursor:pointer;font-size:12.5px">Audit trail</summary>
+        <pre class="log" id="d-audit" style="margin-top:10px"></pre>
+      </details>
+    </div>
   </section>
 
 </main>
+
+<!-- rejection modal -->
+<div class="overlay" id="reject-modal" hidden>
+  <div class="modal">
+    <div class="head"><h3>Reject this remediation</h3></div>
+    <div class="body">
+      <label class="field" for="reject-reason">
+        Why are you rejecting it? <span style="color:var(--bad)">Required</span>
+      </label>
+      <textarea id="reject-reason"
+        placeholder="e.g. Do not restart the service. The deployment changed immediately before the incident — investigate it and prefer rollback if the evidence supports it."></textarea>
+      <div class="note">
+        This is not a formality. The reason is added to the incident context and
+        sent to the reasoning engine to produce a revised plan, so a rejection
+        without one leaves the agent unable to do anything different.
+      </div>
+    </div>
+    <div class="foot">
+      <button id="reject-cancel">Cancel</button>
+      <button id="reject-confirm" class="danger">Reject with this reason</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 <script src="/ui/app.js"></script>
