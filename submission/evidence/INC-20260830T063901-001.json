@@ -1,0 +1,120 @@
+{
+  "incident_id": "INC-20260830T063901-001",
+  "final_state": "RESOLVED",
+  "tickets": [
+    "TKT-20260830-063900-5742",
+    "TKT-20260830-063854-9283"
+  ],
+  "correlation": {
+    "master_incident_id": "INC-20260830T063901-001",
+    "member_tickets": [
+      "TKT-20260830-063900-5742",
+      "TKT-20260830-063854-9283"
+    ],
+    "excluded_tickets": [],
+    "correlation_basis": [
+      "TKT-20260830-063900-5742 references ticket-booking",
+      "TKT-20260830-063900-5742 created within incident window (2026-08-30T06:39:00.574267+00:00)",
+      "TKT-20260830-063900-5742 describes known failure symptoms",
+      "TKT-20260830-063854-9283 references ticket-booking",
+      "TKT-20260830-063854-9283 created within incident window (2026-08-30T06:38:54.928327+00:00)",
+      "TKT-20260830-063854-9283 describes known failure symptoms"
+    ],
+    "rationale": "2 ticket(s) correlated to deployment ticket-booking."
+  },
+  "analysis_source": "unavailable",
+  "bob_analysis": null,
+  "root_cause": null,
+  "recommended_action": null,
+  "human_decision": "approved",
+  "rejection_feedback": null,
+  "feedback_history": [
+    "Confirm the rollout history names a healthy revision before acting."
+  ],
+  "revision_count": 0,
+  "executed": true,
+  "verification_outcome": "PASS",
+  "created_at": "2026-08-30T06:39:01.070438Z",
+  "resolved_at": "2026-08-30T06:39:08.685767Z",
+  "audit_log": [
+    {
+      "step": "correlation",
+      "member_tickets": [
+        "TKT-20260830-063900-5742",
+        "TKT-20260830-063854-9283"
+      ],
+      "excluded_tickets": [],
+      "basis": [
+        "TKT-20260830-063900-5742 references ticket-booking",
+        "TKT-20260830-063900-5742 created within incident window (2026-08-30T06:39:00.574267+00:00)",
+        "TKT-20260830-063900-5742 describes known failure symptoms",
+        "TKT-20260830-063854-9283 references ticket-booking",
+        "TKT-20260830-063854-9283 created within incident window (2026-08-30T06:38:54.928327+00:00)",
+        "TKT-20260830-063854-9283 describes known failure symptoms"
+      ]
+    },
+    {
+      "stage": "BOB",
+      "invoked_at": "2026-08-30T06:39:01.088430+00:00",
+      "mode": "kubemedic-analyst",
+      "invocation": [],
+      "duration_ms": 17,
+      "ok": false,
+      "error": "IBM Bob unavailable: found at C:\\Users\\shivraj\\AppData\\Local\\Programs\\IBM Bob\\bin\\bobide.CMD but has no headless stdout mode. Set KUBEMEDIC_BOB_API_KEY + KUBEMEDIC_BOB_AGENT_ID to enable the REST path.",
+      "analysis_source": "unavailable"
+    },
+    {
+      "step": "human_decision",
+      "decision": "rejected",
+      "approver": "validator",
+      "timestamp": "2026-08-30T06:39:01.366791+00:00",
+      "feedback": "Confirm the rollout history names a healthy revision before acting."
+    },
+    {
+      "step": "rejection_recorded",
+      "reason": "Confirm the rollout history names a healthy revision before acting.",
+      "executed": false,
+      "feedback_count": 1
+    },
+    {
+      "step": "human_decision",
+      "decision": "approved",
+      "approver": "validator",
+      "timestamp": "2026-08-30T06:39:01.631621+00:00",
+      "feedback": null
+    },
+    {
+      "step": "execute",
+      "action": "rollback_deployment",
+      "target": "ticket-booking",
+      "parameters": {
+        "to_revision": 39
+      },
+      "started_at": "2026-08-30T06:39:01.631732+00:00"
+    },
+    {
+      "step": "execute_result",
+      "success": true,
+      "message": "rollback_deployment on ticket-booking succeeded",
+      "completed_at": "2026-08-30T06:39:01.696826+00:00"
+    },
+    {
+      "step": "verification",
+      "outcome": "PASS",
+      "signals": [
+        {
+          "name": "rollout_healthy",
+          "passed": true,
+          "detail": "ready=True, updated=2, desired=2"
+        },
+        {
+          "name": "health_endpoint",
+          "passed": true,
+          "detail": "status_code=200, healthy=True"
+        }
+      ],
+      "detail": "Both signals green: rollout healthy and application health OK.",
+      "checked_at": "2026-08-30T06:39:08.685608+00:00"
+    }
+  ]
+}
