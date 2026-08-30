@@ -30,9 +30,38 @@ Allowlisted actions: rollback_deployment, restart_deployment, scale_workload.
 No other action exists. If none fits, recommend null and say what a human
 should do instead.
 
-Return exactly one JSON object matching
-.bob/skills/incident-correlation/references/evidence-schema.md.
-No prose, no markdown fences.
+Return exactly one JSON object with exactly these field names. A hosted model
+cannot open a file in this repository, so the shape is stated here rather than
+referenced -- naming a schema path it cannot read is how a model ends up
+inventing its own field names.
+
+{{
+  "hypotheses": [
+    {{
+      "rank": 1,
+      "statement": "what you think happened",
+      "confidence": "high" | "medium" | "low",
+      "confidence_reason": "why that confidence",
+      "supporting_evidence": ["facts from the evidence above"],
+      "contradicting_evidence": ["facts that argue against, or 'none found'"]
+    }}
+  ],
+  "root_cause": {{
+    "statement": "the underlying cause",
+    "confidence": "high" | "medium" | "low",
+    "is_inference": true
+  }},
+  "dual_signal_note": "optional: where two signals disagree and why",
+  "recommended_action": "rollback_deployment" | "restart_deployment" | "scale_workload" | null,
+  "action_target": "the deployment name",
+  "action_parameters": {{"to_revision": 11}},
+  "reason": "why this action",
+  "requires_human_approval": true
+}}
+
+recommended_action MUST be one of those three strings or null -- never an
+object. action_target is required whenever recommended_action is not null.
+No prose, no markdown fences, no extra top-level fields.
 """
 
 FEEDBACK_BLOCK = """

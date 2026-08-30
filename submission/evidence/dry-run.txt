@@ -1,7 +1,5 @@
-[claude-code] transport: Host session (Claude Code session) call failed: no response from Claude Code session. The request is at .kubemedic/reasoning-request.md. Ask the host agent to read it and write its JSON analysis to .kubemedic/reasoning-response.json, then run the same command again. Set KUBEMEDIC_HOST_WAIT_SECONDS to wait in-process instead of returning immediately.
-[PROVIDERS] claude-code unavailable; fallback gemini is not configured: GEMINI_API_KEY is unset. Get a key from https://aistudio.google.com/apikey and export it.
-[claude-code] transport: Host session (Claude Code session) call failed: no response from Claude Code session. The request is at .kubemedic/reasoning-request.md. Ask the host agent to read it and write its JSON analysis to .kubemedic/reasoning-response.json, then run the same command again. Set KUBEMEDIC_HOST_WAIT_SECONDS to wait in-process instead of returning immediately.
-[PROVIDERS] claude-code unavailable; fallback gemini is not configured: GEMINI_API_KEY is unset. Get a key from https://aistudio.google.com/apikey and export it.
+[ibm-bob] not_configured: KUBEMEDIC_BOB_API_KEY is unset. Set it with KUBEMEDIC_BOB_AGENT_ID, or run Bob interactively in the workspace and use the manual provider.
+[PROVIDERS] ibm-bob unavailable: KUBEMEDIC_BOB_API_KEY is unset. Set it with KUBEMEDIC_BOB_AGENT_ID, or run Bob interactively in the workspace and use the manual provider.. Falling back to gemini because AI_FALLBACK_ENABLED=true.
 ====================================================================
 KubeMedic deterministic dry run
 ====================================================================
@@ -21,22 +19,20 @@ KubeMedic deterministic dry run
       pods        = 2, events = 1, revisions = 2
 
 [4] Correlation: many tickets, one incident
-      incident    = INC-20260830T123409-001
+      incident    = INC-20260830T124602-001
       members     = ['TKT-101', 'TKT-102', 'TKT-103']
       excluded    = none
         - TKT-101 references ticket-booking
-        - TKT-101 created within incident window (2026-08-30T12:31:09.473387+00:00)
+        - TKT-101 created within incident window (2026-08-30T12:43:02.655206+00:00)
         - TKT-102 references ticket-booking
 
 [5] AI analysis
-      provider    = host UNAVAILABLE: Host session (Claude Code session) call failed: no response from Claude Code session. Th
-      using a SCRIPTED analysis so the lifecycle is still demonstrable.
-      this is fixture reasoning, not a model. The record says so.
-      root cause  = Undetermined; the failing pod may be transient.
-      confidence  = low
+      provider    = gemini (live)
+      root cause  = The new version ticketbooking:1.1 introduced a defect or bad confi
+      confidence  = high
 
 [6] Remediation proposal
-      action      = restart_deployment -> ticket-booking
+      action      = rollback_deployment -> ticket-booking
       state       = PENDING_APPROVAL
 
 [7] Human final review required
@@ -48,11 +44,10 @@ KubeMedic deterministic dry run
       cluster     = revision 12, UNCHANGED
 
 [9] Revised analysis, with the feedback in context
-      provider    = host UNAVAILABLE: Host session (Claude Code session) call failed: no response from Claude Code session. Th
-      using a SCRIPTED analysis so the lifecycle is still demonstrable.
-      this is fixture reasoning, not a model. The record says so.
-      was         = restart_deployment
+      provider    = gemini (live)
+      was         = rollback_deployment
       now         = rollback_deployment {'to_revision': 11}
+      WARNING: the plan did not change after the objection
 
 [10] Approval received
       state       = APPROVED
@@ -68,17 +63,13 @@ KubeMedic deterministic dry run
 
 [13] Incident closed
       final state = RESOLVED
-      record      = C:\Users\shivraj\AppData\Local\Temp\dryrun\INC-20260830T123409-001.json
+      record      = C:\Users\shivraj\AppData\Local\Temp\dr\INC-20260830T124602-001.json
 
 ====================================================================
-  incident ID    = INC-20260830T123409-001
+  incident ID    = INC-20260830T124602-001
   ticket IDs     = ['TKT-101', 'TKT-102', 'TKT-103']
-  AI provider    = scripted-fixture
+  AI provider    = gemini
   MCP tools used = ['get_application_health', 'get_events', 'get_pods', 'get_recent_changes', 'get_workload_status', 'list_tickets']
   cluster calls  = 3
   final status   = RESOLVED
-
-  NOTE: no AI provider was reachable, so the analysis came from
-  the scripted fixture. analysis_source in the record reads
-  'fixture' -- this run does NOT demonstrate live reasoning.
 ====================================================================

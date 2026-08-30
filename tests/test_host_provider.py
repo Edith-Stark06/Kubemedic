@@ -39,9 +39,14 @@ EVIDENCE = {"deployment_name": "ticket-booking"}
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
     reset_provider_cache()
+    # Every credential, not just the IBM ones. agent/secrets.py loads .env
+    # into the process environment, so a developer with a real key would
+    # otherwise see these "nothing is configured" tests resolve to whatever
+    # they happen to have set.
     for key in ("KUBEMEDIC_BOB_API_KEY", "KUBEMEDIC_BOB_AGENT_ID",
                 "KUBEMEDIC_WATSONX_API_KEY", "KUBEMEDIC_WATSONX_PROJECT_ID",
-                "KUBEMEDIC_ANTHROPIC_API_KEY"):
+                "KUBEMEDIC_ANTHROPIC_API_KEY",
+                "KUBEMEDIC_GEMINI_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     yield
     reset_provider_cache()

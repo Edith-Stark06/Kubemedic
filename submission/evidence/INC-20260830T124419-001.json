@@ -1,0 +1,176 @@
+{
+  "incident_id": "INC-20260830T124419-001",
+  "final_state": "RESOLVED",
+  "tickets": [
+    "TKT-101",
+    "TKT-102",
+    "TKT-103"
+  ],
+  "correlation": {
+    "master_incident_id": "INC-20260830T124419-001",
+    "member_tickets": [
+      "TKT-101",
+      "TKT-102",
+      "TKT-103"
+    ],
+    "excluded_tickets": [],
+    "correlation_basis": [
+      "TKT-101 references ticket-booking",
+      "TKT-101 created within incident window (2026-08-30T12:41:19.167326+00:00)",
+      "TKT-102 references ticket-booking",
+      "TKT-102 created within incident window (2026-08-30T12:42:19.167326+00:00)",
+      "TKT-102 describes known failure symptoms",
+      "TKT-103 references ticket-booking",
+      "TKT-103 created within incident window (2026-08-30T12:43:19.167326+00:00)",
+      "TKT-103 describes known failure symptoms"
+    ],
+    "rationale": "3 ticket(s) correlated to deployment ticket-booking."
+  },
+  "analysis_source": "gemini",
+  "bob_analysis": {
+    "schema_version": "1.0",
+    "analysis_source": "gemini",
+    "status": null,
+    "correlation": null,
+    "timeline": [],
+    "hypotheses": [
+      {
+        "rank": 1,
+        "statement": "The deployment update to revision 12 (image ticketbooking:1.1) introduced a regression causing readiness probe HTTP 500 failures on the new pod, stalling the rollout.",
+        "confidence": "high",
+        "confidence_reason": "The new pod ticket-booking-7d6b9-new running ticketbooking:1.1 is failing readiness probes with HTTP 500, while the old pod running revision 11 (ticketbooking:1.0) remains ready.",
+        "supporting_evidence": [
+          "pod ticket-booking-7d6b9-new has ready=false and image ticketbooking:1.1",
+          "Event Warning Unhealthy: Readiness probe failed: HTTP 500",
+          "Rollout history shows revision 12 (ticketbooking:1.1) is current and revision 11 (ticketbooking:1.0) is previous"
+        ],
+        "contradicting_evidence": [
+          "none found"
+        ],
+        "cheapest_next_check": ""
+      }
+    ],
+    "root_cause": {
+      "statement": "Application defect or misconfiguration introduced in image ticketbooking:1.1 (revision 12) causing readiness probes to fail with HTTP 500.",
+      "confidence": "high",
+      "is_inference": true
+    },
+    "dual_signal_note": "Overall application health endpoint returns HTTP 200 because the old pod (ticket-booking-5594-old running revision 11) remains ready and active, while the new pod is failing readiness probes.",
+    "recommended_action": "rollback_deployment",
+    "action_target": "ticket-booking",
+    "action_parameters": {
+      "to_revision": 11
+    },
+    "reason": "Rolling back deployment ticket-booking to working revision 11 (ticketbooking:1.0) eliminates the failing new pod and resolves the stalled deployment.",
+    "risk_explanation": "",
+    "requires_human_approval": true,
+    "notes_for_reviewer": null,
+    "missing_signals": [],
+    "partial_evidence": []
+  },
+  "root_cause": {
+    "statement": "Application defect or misconfiguration introduced in image ticketbooking:1.1 (revision 12) causing readiness probes to fail with HTTP 500.",
+    "confidence": "high",
+    "is_inference": true
+  },
+  "recommended_action": "rollback_deployment",
+  "human_decision": "approved",
+  "rejection_feedback": null,
+  "feedback_history": [
+    "Do not restart the service. The deployment changed immediately before the incident. Investigate the deployment and prefer rollback if the evidence supports it."
+  ],
+  "revision_count": 1,
+  "executed": true,
+  "verification_outcome": "PASS",
+  "created_at": "2026-08-30T12:44:19.167594Z",
+  "resolved_at": "2026-08-30T12:44:44.787314Z",
+  "audit_log": [
+    {
+      "step": "correlation",
+      "member_tickets": [
+        "TKT-101",
+        "TKT-102",
+        "TKT-103"
+      ],
+      "excluded_tickets": [],
+      "basis": [
+        "TKT-101 references ticket-booking",
+        "TKT-101 created within incident window (2026-08-30T12:41:19.167326+00:00)",
+        "TKT-102 references ticket-booking",
+        "TKT-102 created within incident window (2026-08-30T12:42:19.167326+00:00)",
+        "TKT-102 describes known failure symptoms",
+        "TKT-103 references ticket-booking",
+        "TKT-103 created within incident window (2026-08-30T12:43:19.167326+00:00)",
+        "TKT-103 describes known failure symptoms"
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "gemini",
+      "analysis_source": "gemini"
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "rejected",
+      "approver": "dry-run",
+      "timestamp": "2026-08-30T12:44:33.444636+00:00",
+      "feedback": "Do not restart the service. The deployment changed immediately before the incident. Investigate the deployment and prefer rollback if the evidence supports it."
+    },
+    {
+      "step": "rejection_recorded",
+      "reason": "Do not restart the service. The deployment changed immediately before the incident. Investigate the deployment and prefer rollback if the evidence supports it.",
+      "executed": false,
+      "feedback_count": 1
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "approved",
+      "approver": "dry-run",
+      "timestamp": "2026-08-30T12:44:44.786788+00:00",
+      "feedback": null
+    },
+    {
+      "step": "execute",
+      "action": "rollback_deployment",
+      "target": "ticket-booking",
+      "parameters": {
+        "to_revision": 11
+      },
+      "started_at": "2026-08-30T12:44:44.786854+00:00"
+    },
+    {
+      "step": "execute_result",
+      "success": true,
+      "message": "rollback_deployment on ticket-booking succeeded",
+      "completed_at": "2026-08-30T12:44:44.786918+00:00"
+    },
+    {
+      "step": "verification",
+      "outcome": "PASS",
+      "signals": [
+        {
+          "name": "rollout_healthy",
+          "passed": true,
+          "detail": "ready=True, updated=2, desired=2"
+        },
+        {
+          "name": "health_endpoint",
+          "passed": true,
+          "detail": "status_code=200, healthy=True"
+        }
+      ],
+      "detail": "Both signals green: rollout healthy and application health OK.",
+      "checked_at": "2026-08-30T12:44:44.787222+00:00"
+    }
+  ]
+}

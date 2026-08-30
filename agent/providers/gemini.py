@@ -34,7 +34,7 @@ from agent.providers.prompt import SYSTEM_PROMPT
 from agent.secrets import get_secrets
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 class GeminiProvider(BaseProvider):

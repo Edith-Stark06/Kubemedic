@@ -102,7 +102,7 @@ class BobAnalysis(BaseModel):
     # matching change is in
     # .bob/skills/incident-correlation/references/evidence-schema.md.
     analysis_source: Literal[
-        "ibm-bob", "watsonx", "anthropic",
+        "ibm-bob", "watsonx", "anthropic", "gemini",
         # Reasoning done by the agentic IDE hosting the workspace. Stamped
         # honestly: the Bob IDE reports ibm-bob because it genuinely is Bob.
         "claude-code", "antigravity", "host",
@@ -153,6 +153,15 @@ class BobAnalysis(BaseModel):
         action = raw.get("recommended_action")
         if action is not None:
             valid = {a.value for a in AllowedAction}
+            # A model may return an object here rather than a string -- a live
+            # Gemini call did exactly that, and `action not in valid` raised
+            # TypeError: unhashable type instead of a refusal. Anything that is
+            # not a plain string is simply not in the allowlist.
+            if not isinstance(action, str):
+                raise ValueError(
+                    f"recommended_action must be one of {sorted(valid)}, "
+                    f"got {type(action).__name__}: {action!r}"
+                )
             if action not in valid:
                 raise ValueError(
                     f"recommended_action '{action}' is not in the allowlist "

@@ -20,12 +20,21 @@ the first configured engine in order, ending at `host`.
 |---|---|---|
 | **IBM watsonx** | **AUTHENTICATION OK, SERVICE INACTIVE** | IAM token exchange succeeds; deployment list succeeds; inference returns `403 invalid_instance_status_error` — the WML instance behind the deployment is Inactive and cannot be reactivated on this account |
 | **IBM Bob** | **UNVERIFIED / AUTHENTICATION FAILURE** | See below |
-| **Gemini** | **READY, UNVERIFIED** | Implemented against the REST `generateContent` endpoint. No key was available to test with, so this has never returned a live analysis |
+| **Gemini** | **VERIFIED WORKING** | Live analysis returned in ~14s on `gemini-3.6-flash`: ranked hypothesis, root cause labelled as inference, contradicting evidence, and `rollback_deployment -> ticket-booking {to_revision: 11}` |
 | **Host IDE** | **CONFIGURED** | Detects Claude Code / Bob IDE / Antigravity; verified working in this workspace |
 
-**No provider has produced a live analysis.** Every incident record reads
-`analysis_source: "unavailable"`, or `"fixture"` for `scripts/dry_run.py`.
-That is stated plainly rather than implied otherwise.
+**Gemini has produced live analyses**; the IBM engines have not. Records from
+a Gemini run read `analysis_source: "gemini"`. IBM records still read
+`"unavailable"`.
+
+Two bugs a live model found that no fixture had:
+
+1. `BobAnalysis.from_raw` crashed with `TypeError: unhashable type` when the
+   model returned an object for `recommended_action` instead of a string. It
+   now refuses cleanly.
+2. The prompt named the schema by **file path** -- which a hosted model cannot
+   open -- so the model invented its own field names. The required shape is
+   now stated inline.
 
 ### IBM Bob — what probing established
 
@@ -66,7 +75,7 @@ export KUBEMEDIC_BOB_API_BASE="https://<your-instance>"
 
 ```bash
 export GEMINI_API_KEY="..."        # from https://aistudio.google.com/apikey
-export GEMINI_MODEL="gemini-2.0-flash"
+export GEMINI_MODEL="gemini-3.6-flash"
 export AI_FALLBACK_ENABLED=true
 ```
 
