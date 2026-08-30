@@ -38,3 +38,8 @@ data/*.sqlite3
 # Incident records are runtime output. Curated evidence for judging belongs
 # in submission/evidence/ instead, which IS tracked.
 records/*.json
+
+# Analysis pasted from an interactive IBM Bob session. Machine-local
+# working input, not source -- and it should never be mistaken for a
+# committed claim about what Bob returned.
+bob-analysis.json

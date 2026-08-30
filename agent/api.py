@@ -160,7 +160,14 @@ def _require(incident_id: str) -> Incident:
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "kubemedic-agent-api"}
+    """Liveness. Cheap by design -- never calls a model or the cluster."""
+    from agent.providers import configured_provider_name
+
+    return {
+        "status": "ok",
+        "service": "kubemedic-agent-api",
+        "reasoning_provider": configured_provider_name(),
+    }
 
 
 @app.get("/api/cluster")
@@ -385,11 +392,33 @@ def revise_incident_alias(incident_id: str) -> IncidentSummary:
     return revise_incident(incident_id)
 
 
+@app.get("/api/provider")
+def provider() -> dict[str, Any]:
+    """
+    Which reasoning engine is active, whether each is configured, and how each
+    has performed this process.
+
+    Deliberately does NOT probe the network. A health endpoint that calls a
+    model API turns a slow third party into a red dashboard and puts it in the
+    path of a liveness check. Reachability is discovered by running an
+    incident, where a failure is handled rather than merely reported.
+
+    No credential value appears here, only whether one is present.
+    """
+    from agent.providers import provider_status
+
+    return provider_status()
+
+
 @app.get("/api/limits")
 def limits() -> dict[str, Any]:
     """Bounds a reviewer should know about before they start rejecting plans."""
+    from agent.providers import configured_provider_name, provider_names
+
     return {
         "max_revisions": MAX_REVISIONS,
+        "reasoning_provider": configured_provider_name(),
+        "available_providers": provider_names(),
         "allowed_actions": [
             "rollback_deployment", "restart_deployment", "scale_workload",
         ],

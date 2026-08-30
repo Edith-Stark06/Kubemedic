@@ -361,23 +361,27 @@ class TestInvalidRemediation:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestBobUnavailableState:
-    def test_analyze_no_key_returns_unavailable(self):
-        """analyze() with no API key must return ok=False, never fabricate."""
-        import os
-        os.environ.pop("KUBEMEDIC_BOB_API_KEY", None)
-        # Re-import to pick up cleared env (module-level constant is already set,
-        # but the function checks the module-level var; patch it directly)
-        import agent.bob as bob_mod
-        original = bob_mod.BOB_API_KEY
-        bob_mod.BOB_API_KEY = ""
+    def test_analyze_no_key_returns_unavailable(self, monkeypatch):
+        """analyze() with no credentials must return ok=False, never fabricate.
+
+        The assertion is unchanged from when this checked a module-level
+        constant in agent/bob.py; only the mechanism moved, because the
+        credential now resolves through agent/secrets.py inside the provider.
+        """
+        from agent.bob import analyze
+        from agent.providers import reset_provider_cache
+
+        monkeypatch.delenv("KUBEMEDIC_BOB_API_KEY", raising=False)
+        monkeypatch.delenv("KUBEMEDIC_BOB_AGENT_ID", raising=False)
+        monkeypatch.setenv("KUBEMEDIC_REASONING_PROVIDER", "ibm-bob")
+        reset_provider_cache()
         try:
-            from agent.bob import analyze
             result = analyze({"deployment": "test"}, [])
             assert not result.ok
             assert result.analysis is None
             assert result.error is not None
         finally:
-            bob_mod.BOB_API_KEY = original
+            reset_provider_cache()
 
     def test_reasoning_on_bob_unavailable_does_not_fabricate(self):
         """run_analysis must transition to BOB_UNAVAILABLE, not ANALYSED."""

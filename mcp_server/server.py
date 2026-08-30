@@ -34,7 +34,7 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
-from mcp_server import tools
+from mcp_server import incidents, tools
 from mcp_server.db import init_db
 from mcp_server.watcher import KubeWatcher
 
@@ -56,6 +56,9 @@ EVIDENCE_PROFILE_TOOLS = frozenset({
     "get_workload_snapshot",
     "list_tickets",
     "get_ticket",
+    "list_incidents",
+    "get_incident",
+    "get_rejection_history",
 })
 
 # Tools that write. Available only when no restrictive profile is active.
@@ -163,6 +166,43 @@ ALL_TOOLS: list[types.Tool] = [
         },
     ),
     types.Tool(
+        name="list_incidents",
+        description=(
+            "Recent incident records, newest first: which tickets were "
+            "correlated, what was proposed, what a human decided, and whether "
+            "recovery verified. Read-only history."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max records (default 20)"}
+            },
+        },
+    ),
+    types.Tool(
+        name="get_incident",
+        description="One incident record in full, including its audit log.",
+        inputSchema={
+            "type": "object",
+            "properties": {"incident_id": {"type": "string"}},
+            "required": ["incident_id"],
+        },
+    ),
+    types.Tool(
+        name="get_rejection_history",
+        description=(
+            "Every reason a human has given for rejecting a remediation plan. "
+            "Operator knowledge the cluster evidence does not contain -- read "
+            "this before proposing an action that was refused before."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "deployment": {"type": "string", "description": "Optional filter"}
+            },
+        },
+    ),
+    types.Tool(
         name="create_ticket",
         description="Open a ticket. Writes to the ticket store.",
         inputSchema={
@@ -205,6 +245,9 @@ _DISPATCH = {
     "get_workload_snapshot": tools.get_workload_snapshot,
     "list_tickets": tools.list_tickets,
     "get_ticket": tools.get_ticket,
+    "list_incidents": incidents.list_incidents,
+    "get_incident": incidents.get_incident,
+    "get_rejection_history": incidents.get_rejection_history,
     "create_ticket": tools.create_ticket,
     "update_ticket_status": tools.update_ticket_status,
 }

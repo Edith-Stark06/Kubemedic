@@ -97,7 +97,13 @@ class TimelineEvent(BaseModel):
 class BobAnalysis(BaseModel):
     """Parsed, validated output of one IBM Bob reasoning call."""
     schema_version: str = "1.0"
-    analysis_source: Literal["ibm-bob", "unavailable"] = "ibm-bob"
+    # Provider id, or "unavailable". Widened from a Bob-only literal when
+    # the reasoning layer became pluggable -- see agent/providers/. The
+    # matching change is in
+    # .bob/skills/incident-correlation/references/evidence-schema.md.
+    analysis_source: Literal[
+        "ibm-bob", "watsonx", "anthropic", "unavailable"
+    ] = "ibm-bob"
     status: str | None = None                  # "evidence_unavailable" or absent
 
     # Correlation block (present on success)

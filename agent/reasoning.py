@@ -9,7 +9,23 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent.bob import BobResult, analyze as bob_analyze, unavailable_analysis
+from agent.providers import (
+    ProviderResult as BobResult,
+    get_provider,
+    unavailable_analysis,
+)
+
+
+def bob_analyze(evidence, tickets, feedback=None):
+    """
+    Call the active reasoning provider.
+
+    Kept under this name because it is the seam the whole test suite
+    patches by string. The provider behind it is selected by
+    KUBEMEDIC_REASONING_PROVIDER; nothing else in the pipeline knows or
+    cares which engine answered.
+    """
+    return get_provider().analyze(evidence, tickets, feedback=feedback)
 from agent.models import (
     BobAnalysis,
     EvidenceSnapshot,
