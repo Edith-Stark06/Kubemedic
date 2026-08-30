@@ -65,14 +65,45 @@ Pod-state, events, change-history, health, ticket, and provider-auditor investig
 ### What Bob built in Dev mode
 - Consolidated two competing implementations (`orchestrator/` Track 1 and `agent/` Track 2) into the submitted architecture
 - Implemented `agent/executor.py`, `agent/verification.py`, `agent/audit.py`, `agent/api.py`
-- Built the provider registry (`agent/providers/`) with five pluggable engines and a single validated contract
-- Fixed three bugs found during the Verona branch merge (missing `ARG` in Dockerfile, unawaited `httpx` calls, duplicate workload entrypoint)
-- Authored the submission documents, demo script, and submission checklist
-
 ### What Bob found in Auditor mode
-- No Google SDK, no Gemini import, no `GOOGLE_API_KEY` anywhere in the codebase (confirmed by `git grep`)
-- No committed credentials or absolute local paths
-- Findings from that pass are documented in [`docs/20_KNOWN_GAPS.md`](../docs/20_KNOWN_GAPS.md)
+
+Pointed at the repository with the `submission-audit` skill and asked to score
+it adversarially before it was finalised, Bob found six real problems:
+
+- stale test counts across six files
+- two written deliverables still carrying DRAFT markers
+- an unresolved either/or left in this document
+- a missing `THIRD_PARTY_NOTICES.md`, tracked as gap G-D3
+- `.env.example` pointing at a namespace that does not exist — anyone
+  following the setup instructions would have failed at step one
+- a limitation claim in `README.md` that had stopped being true
+
+All were corrected, and [`docs/20_KNOWN_GAPS.md`](../docs/20_KNOWN_GAPS.md) was
+rewritten to mark the gaps since resolved. A skill we wrote, used against our
+own submission, catching things we had missed — this is the clearest single
+demonstration of Bob doing useful work here.
+
+An earlier pass with the `gemini-audit` skill confirmed no Google SDK was
+present at that time. That is no longer true, deliberately: see §5.
+
+### Attribution
+
+The consolidation above — `agent/models.py`, `correlation.py`, `reasoning.py`,
+`executor.py`, `verification.py`, `audit.py`, `pipeline.py` and the 62 tests
+that shipped with them — is commits `86fb36b`, `09c8801`, `26aa0b8`, `317c979`,
+`6af80d4` and `5e1743f`, all authored by Ramana Sree inside the contest window.
+
+The remaining engineering — the MCP contract work, the live Kubernetes client,
+the evidence adapters, the agent HTTP API, the human review feedback loop, the
+provider registry, the operator console, the CLI and the integration test suite
+— was built with a different AI coding assistant in a terminal session. Commits
+`de4b32d`, `c570da9`, `d4796a5`, `f9c564b`, `358eecd`, `b53d7ab`, `592d487`,
+`9ba495e`, `d3d91a1` and the merges.
+
+We state this because the git history is public and the authorship is
+checkable. The rules ask how IBM Bob was utilised, not for a claim that nothing
+else was — and a project whose central argument is that it does not overstate
+what it did cannot overstate this.
 
 ---
 
@@ -250,3 +281,35 @@ On the `evidence` profile, Bob is given **eight read-only tools and no tool that
 | Modes, skills, personas | `.bob/` |
 | Interactive ingestion path | `scripts/ingest_bob_analysis.py` |
 | Session export | `submission/bob-report/` |
+
+---
+
+## 5. Why a Gemini provider exists
+
+Neither IBM engine could answer before the deadline. watsonx returns
+`403 invalid_instance_status_error` — the Watson Machine Learning instance
+behind the deployment is Inactive and could not be reactivated on this account.
+The IBM Bob REST base URL is unresolved: a real Inference-scoped key returns
+`401` on every path of `cloud.manufact.com`, and `bob.ibm.com` serves `404`
+HTML because it is the web console, not the API.
+
+Without a working reasoning path the system could not demonstrate its own loop.
+Gemini was added as a **fallback**, not a replacement. `AI_PRIMARY_PROVIDER`
+remains IBM; both IBM engines stay registered, tested and selectable by name,
+and `KUBEMEDIC_IBM_ENABLED=true` restores them to the default order the moment
+either works.
+
+It earned its place twice over. Running a real model against the contract
+exposed three defects that no fixture had:
+
+1. `BobAnalysis.from_raw` **crashed** with `TypeError: unhashable type` when the
+   model returned an object for `recommended_action` instead of a string.
+2. An explicit `"action_parameters": null` was **rejected outright**, throwing
+   away an otherwise correct diagnosis, because the field carries a default
+   rather than being typed optional.
+3. The prompt named the output schema by **file path** — which a hosted model
+   cannot open — so the model invented its own field names.
+
+None were reachable by a suite that only ever fed the parser well-formed
+fixtures, and every one of them would have broken IBM Bob in exactly the same
+way. The provider abstraction is what made them visible.

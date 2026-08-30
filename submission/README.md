@@ -14,7 +14,7 @@ human in the loop
 | 1 | Video demonstration, including how IBM Bob was used | *link to be added* | **TODO** |
 | 2 | Written problem and solution statements | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | **DONE** |
 | 3 | Written statement on how IBM Bob was utilised | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | **DONE** |
-| 4a | Working code repository | [github.com/Edith-Stark06/Kubemedic](https://github.com/Edith-Stark06/Kubemedic) | **DONE** |
+| 4a | Working code repository — see [`CODE_REPOSITORY.md`](CODE_REPOSITORY.md) | [github.com/Edith-Stark06/Kubemedic](https://github.com/Edith-Stark06/Kubemedic) | **DONE** |
 | 4b | Exported IBM Bob report of all relevant tasks/sessions | [`bob-report/`](bob-report/) | **DONE** — best-effort (Bob v1.126.0 has no export function; see bob-report/README.md) |
 
 ---
