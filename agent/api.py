@@ -346,6 +346,45 @@ def get_record(incident_id: str) -> dict[str, Any]:
     return IncidentRecord.from_incident(incident).model_dump(mode="json")
 
 
+# ---------------------------------------------------------------------------
+# Compatibility aliases for the dashboard
+#
+# dashboard/api_adapter.py was written against an unprefixed surface --
+# GET /incidents, GET /incidents/{id}, POST /incidents/{id}/decision -- while
+# this module serves /api/... and calls the review route "review".
+#
+# Aliasing here rather than editing the adapter keeps the seam in one place and
+# means either spelling works. They delegate to the same handlers, so there is
+# no second implementation of the approval gate to keep in step.
+# ---------------------------------------------------------------------------
+
+@app.get("/incidents", response_model=list[IncidentSummary])
+def list_incidents_alias() -> list[IncidentSummary]:
+    return list_incidents()
+
+
+@app.get("/incidents/{incident_id}")
+def get_incident_alias(incident_id: str) -> dict[str, Any]:
+    return get_incident(incident_id)
+
+
+@app.post("/incidents/{incident_id}/decision", response_model=IncidentSummary)
+def review_incident_alias(incident_id: str, body: ReviewRequest) -> IncidentSummary:
+    return review_incident(incident_id, body)
+
+
+@app.post("/incidents/{incident_id}/execute")
+def execute_incident_alias(
+    incident_id: str, cluster=Depends(get_cluster)
+) -> dict[str, Any]:
+    return execute_incident(incident_id, cluster)
+
+
+@app.post("/incidents/{incident_id}/revise", response_model=IncidentSummary)
+def revise_incident_alias(incident_id: str) -> IncidentSummary:
+    return revise_incident(incident_id)
+
+
 @app.get("/api/limits")
 def limits() -> dict[str, Any]:
     """Bounds a reviewer should know about before they start rejecting plans."""

@@ -1,0 +1,21 @@
+{
+  "//": "GLOBAL: ~/.bob/settings/mcp_settings.json — Verona. Merge into the existing file rather than replacing it.",
+  "//note": "The project's read-only kubemedic-evidence server comes from the repo's .bob/mcp.json and needs no entry here.",
+  "//playwright": "This is the high-value one for a UI owner. It lets Bob open the dashboard in a real browser, click through the incident flow, screenshot each state, and verify the reject dialog actually disables its submit button. DISABLE IT BEFORE RECORDING — a browser session Bob controls is one more thing that can hang on camera.",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"],
+      "disabled": false,
+      "alwaysAllow": []
+    },
+    "github": {
+      "//": "Optional. Only if you are opening your own PRs. Global, never project — it carries a token and .bob/mcp.json is committed.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_PAT>" },
+      "disabled": true,
+      "alwaysAllow": []
+    }
+  }
+}

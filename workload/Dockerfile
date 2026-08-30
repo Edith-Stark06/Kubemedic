@@ -5,15 +5,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+COPY main.py .
 
-EXPOSE 8000
+# HEALTHY=true  → normal operation (readiness passes, bookings accepted)
+# HEALTHY=false → degraded (readiness fails, real Kubernetes events generated)
+ENV HEALTHY=true
+ENV APP_VERSION=1.0
 
-# Build-time levers: bake a "good" (v1.0, healthy) or "bad" (v1.1, HEALTHY=false)
-# image from the same source. The bad image reproduces the readiness regression.
-ARG APP_VERSION=1.0
-ARG HEALTHY=true
-ENV APP_VERSION=${APP_VERSION} \
-    HEALTHY=${HEALTHY}
+EXPOSE 8001
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -30,23 +30,26 @@ spec:
           image: ticketbooking:1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8000
+            - containerPort: 8001
           # Image supplies APP_VERSION/HEALTHY. The "bad" image (ticketbooking:1.1,
-          # baked HEALTHY=false) is how the deterministic readiness regression ships.
-          # Readiness uses the app's /health so a 503 makes the pod NotReady.
+          # baked HEALTHY=false) is how the deterministic readiness regression
+          # ships. Readiness uses /ready, which the app fails when HEALTHY=false,
+          # so the new pod never becomes Ready and the rollout stalls.
           readinessProbe:
             httpGet:
-              path: /health
-              port: 8000
+              path: /ready
+              port: 8001
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
-          # Liveness is a plain TCP check so a bad /health does NOT crash-loop the
-          # pod; it stays Running-but-NotReady (a clean readiness regression).
+          # Liveness is a plain TCP check, deliberately NOT /health -- the app
+          # honestly returns 500 there when degraded, and wiring that to liveness
+          # would crash-loop the pod. TCP keeps it Running-but-NotReady, which is
+          # a clean, readable readiness regression.
           livenessProbe:
             tcpSocket:
-              port: 8000
+              port: 8001
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
