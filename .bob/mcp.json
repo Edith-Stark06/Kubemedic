@@ -4,7 +4,12 @@
   "mcpServers": {
     "kubemedic-evidence": {
       "command": "python",
-      "args": ["-m", "mcp_server.server", "--profile", "evidence"],
+      "args": [
+        "-m",
+        "mcp_server.server",
+        "--profile",
+        "evidence"
+      ],
       "cwd": "${workspaceFolder}",
       "env": {
         "KUBEMEDIC_NAMESPACE": "${KUBERNETES_NAMESPACE}",
@@ -17,6 +22,7 @@
         "get_workload_status",
         "get_pods",
         "get_events",
+        "get_recent_changes",
         "get_application_health",
         "get_workload_snapshot",
         "list_tickets",

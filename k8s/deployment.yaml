@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticket-booking
+  namespace: opspilot
+  labels:
+    app: ticket-booking
+    app.kubernetes.io/part-of: opspilot
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  # maxUnavailable: 0 keeps healthy (old) pods serving if a new revision is bad,
+  # so a regression shows up as a stuck rollout / NotReady new pods rather than
+  # an outage. Safe, realistic, and cleanly reversible.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ticket-booking
+  template:
+    metadata:
+      labels:
+        app: ticket-booking
+    spec:
+      containers:
+        - name: app
+          image: ticketbooking:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # Image supplies APP_VERSION/HEALTHY. The "bad" image (ticketbooking:1.1,
+          # baked HEALTHY=false) is how the deterministic readiness regression ships.
+          # Readiness uses the app's /health so a 503 makes the pod NotReady.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # Liveness is a plain TCP check so a bad /health does NOT crash-loop the
+          # pod; it stays Running-but-NotReady (a clean readiness regression).
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

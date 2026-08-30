@@ -1,0 +1,8 @@
+# Development and CI dependencies. Install on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+pytest>=8,<10
+
+# fastapi.testclient needs httpx at import time. Without it, tests/test_api.py
+# fails to collect rather than failing with a useful message.
+httpx>=0.27

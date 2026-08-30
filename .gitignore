@@ -26,3 +26,15 @@ kubeconfig.*
 # OS
 .DS_Store
 Thumbs.db
+
+# ── Runtime state (added by REPO-001) ────────────────────────────────────
+# The SQLite ticket store is rebuilt by mcp_server.db.init_db() on startup,
+# so it is machine state, not source. It was committed by the import commit
+# 1448908 because this branch's .gitignore lacked these rules.
+data/*.db
+data/*.db-journal
+data/*.sqlite3
+
+# Incident records are runtime output. Curated evidence for judging belongs
+# in submission/evidence/ instead, which IS tracked.
+records/*.json

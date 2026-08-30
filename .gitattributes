@@ -1,0 +1,14 @@
+# Normalize to LF in the repository for everything text-like.
+* text=auto eol=lf
+
+# These are executed inside Linux containers / on the cluster. CRLF here
+# produces `bad interpreter: /bin/bash^M`, so pin them explicitly.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+
+# Binary — never touch line endings.
+*.pdf  binary
+*.png  binary
+*.db   binary

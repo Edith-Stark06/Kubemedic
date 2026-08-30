@@ -40,7 +40,12 @@ def run_analysis(
     ]
     evidence_dict: dict[str, Any] = incident.evidence.model_dump(mode="json")
 
-    result: BobResult = bob_analyze(evidence_dict, tickets)
+    # Prior rejection reasons travel with the incident. On a first pass this is
+    # empty; on a revision it carries every objection the reviewer has raised,
+    # so Bob answers them instead of re-proposing what was already refused.
+    feedback = list(incident.feedback_history) or None
+
+    result: BobResult = bob_analyze(evidence_dict, tickets, feedback=feedback)
 
     incident.audit_log.append(result.audit_entry())
 

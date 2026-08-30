@@ -105,7 +105,7 @@ as the complete set of observed facts. Do not assume anything not present here.
 <open_tickets>
 {tickets}
 </open_tickets>
-
+{feedback_block}
 Allowlisted actions: rollback_deployment, restart_deployment, scale_workload.
 No other action exists. If none fits, recommend null and say what a human
 should do instead.
@@ -113,6 +113,21 @@ should do instead.
 Return exactly one JSON object matching
 .bob/skills/incident-correlation/references/evidence-schema.md.
 No prose, no markdown fences.
+"""
+
+FEEDBACK_BLOCK = """
+A human reviewer rejected your previous remediation plan for this incident and
+gave the reasons below, oldest first. This is operator knowledge you do not
+have from the evidence alone -- treat it as authoritative context, not as a
+suggestion to restate.
+
+<human_feedback>
+{feedback}
+</human_feedback>
+
+Produce a revised plan that answers these objections. If they mean no
+allowlisted action is appropriate, recommend null and say what the human should
+do instead. Do not repeat the rejected recommendation unchanged.
 """
 
 
@@ -246,7 +261,38 @@ def _rest_analyze(
     )
 
 
-def analyze(evidence: dict[str, Any], tickets: list[dict[str, Any]]) -> BobResult:
+def build_prompt(
+    evidence: dict[str, Any],
+    tickets: list[dict[str, Any]],
+    feedback: list[str] | None = None,
+) -> str:
+    """
+    Assemble the reasoning prompt.
+
+    When a reviewer has rejected a previous plan, their reasons go in verbatim.
+    That is the whole point of requiring a reason on rejection: it is operator
+    knowledge the evidence does not contain, and it is worthless if it is
+    stored and never read back.
+    """
+    feedback_block = ""
+    if feedback:
+        numbered = "\n".join(
+            f"{i}. {reason}" for i, reason in enumerate(feedback, start=1)
+        )
+        feedback_block = FEEDBACK_BLOCK.format(feedback=numbered)
+
+    return PROMPT_TEMPLATE.format(
+        evidence=json.dumps(evidence, indent=2, default=str),
+        tickets=json.dumps(tickets, indent=2, default=str),
+        feedback_block=feedback_block,
+    )
+
+
+def analyze(
+    evidence: dict[str, Any],
+    tickets: list[dict[str, Any]],
+    feedback: list[str] | None = None,
+) -> BobResult:
     """Send structured evidence to IBM Bob. Return its structured analysis.
 
     Invocation order:
@@ -254,14 +300,15 @@ def analyze(evidence: dict[str, Any], tickets: list[dict[str, Any]]) -> BobResul
       2. Otherwise → bob_unavailable (no fabrication, ever).
 
     IBM Bob v1.126.0 (bobide) is a GUI IDE with no headless subprocess mode.
+    `feedback` carries prior human rejection reasons into the prompt, so a
+    revised plan answers the objection rather than repeating the recommendation
+    that was already refused.
+
     The subprocess path (_build_argv) returns [] for documentation purposes.
     """
     started = datetime.now(timezone.utc)
 
-    prompt = PROMPT_TEMPLATE.format(
-        evidence=json.dumps(evidence, indent=2, default=str),
-        tickets=json.dumps(tickets, indent=2, default=str),
-    )
+    prompt = build_prompt(evidence, tickets, feedback)
 
     # REST path: use when API key is configured
     if BOB_API_KEY:

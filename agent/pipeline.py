@@ -24,6 +24,7 @@ from agent.audit import record_decision, write_record
 from agent.correlation import correlate
 from agent.executor import KubernetesClient, execute
 from agent.models import (
+    MAX_REVISIONS,
     BobAnalysis,
     EvidenceSnapshot,
     HumanDecision,
@@ -79,6 +80,75 @@ def plan_remediation(incident: Incident) -> Incident:
         }
     )
     return incident
+
+
+# ---------------------------------------------------------------------------
+# Revision — the loop back from a rejection
+# ---------------------------------------------------------------------------
+
+def request_revision(incident: Incident) -> Incident:
+    """
+    Ask Bob for a revised plan after a human rejected the previous one.
+
+    The reviewer's reasons are already on incident.feedback_history (put there
+    by record_decision); run_analysis reads them back into the prompt. This is
+    the step that turns a stored rejection reason into a different plan.
+
+    Preconditions:
+      - incident.state is REJECTED or FEEDBACK_RECORDED
+      - at least one feedback entry exists
+      - revision_count < MAX_REVISIONS
+
+    The incident lands back at PENDING_APPROVAL for a second human review, or
+    at BOB_UNAVAILABLE if Bob could not be reached. It never lands anywhere
+    that can execute: Incident.transition() refuses
+    FEEDBACK_RECORDED -> EXECUTING outright, so no revision path can reach the
+    cluster without passing a fresh approval.
+    """
+    revisable = {IncidentState.REJECTED, IncidentState.FEEDBACK_RECORDED}
+    if incident.state not in revisable:
+        raise ValueError(
+            f"Cannot revise: incident is in state {incident.state}. "
+            f"Expected one of {[s.value for s in revisable]}."
+        )
+    if not incident.feedback_history:
+        raise ValueError(
+            "Cannot revise: no human feedback recorded. A revision exists to "
+            "answer an objection; without one there is nothing to answer."
+        )
+    if incident.revision_count >= MAX_REVISIONS:
+        raise ValueError(
+            f"Revision limit reached ({MAX_REVISIONS}). This incident needs a "
+            "human to act directly rather than another proposal."
+        )
+
+    incident.revision_count += 1
+    incident.audit_log.append(
+        {
+            "step": "revision_requested",
+            "revision": incident.revision_count,
+            "feedback_so_far": list(incident.feedback_history),
+        }
+    )
+    log.info(
+        "[PIPELINE] %s: revision %d requested with %d feedback item(s)",
+        incident.incident_id, incident.revision_count, len(incident.feedback_history),
+    )
+
+    # Clear the previous proposal so a stale plan cannot be approved by
+    # mistake if Bob comes back unavailable.
+    incident.plan = None
+    incident.human_decision = None
+
+    incident, _ = run_analysis(incident)
+    if incident.state == IncidentState.BOB_UNAVAILABLE:
+        log.warning(
+            "[PIPELINE] %s: revision %d stopped - Bob unavailable",
+            incident.incident_id, incident.revision_count,
+        )
+        return incident
+
+    return plan_remediation(incident)
 
 
 # ---------------------------------------------------------------------------
