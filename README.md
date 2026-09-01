@@ -1,7 +1,5 @@
 # KubeMedic
 
-[![CI](https://github.com/Edith-Stark06/Kubemedic/actions/workflows/ci.yml/badge.svg)](https://github.com/Edith-Stark06/Kubemedic/actions/workflows/ci.yml)
-
 **Evidence-driven incident response for Kubernetes, with a human in the loop.**
 
 KubeMedic watches a Kubernetes workload. When a deployment goes bad it collects
