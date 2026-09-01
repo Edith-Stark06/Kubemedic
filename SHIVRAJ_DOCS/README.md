@@ -1,6 +1,6 @@
 # Owner notes
 
-The hackathon is over. This project has a single owner: **Shivraj Rajasekaran**.
+The hackathon is over.
 
 Everything here is forward-looking. The team-allocation layer — per-person
 handoffs, cross-owner blocking requests, submission-deadline checklists — has
