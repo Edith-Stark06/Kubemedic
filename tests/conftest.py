@@ -19,3 +19,22 @@ import pytest
 def _no_settle_wait(monkeypatch):
     monkeypatch.setenv("KUBEMEDIC_SETTLE_TIMEOUT_SECONDS", "0")
     monkeypatch.setenv("KUBEMEDIC_SETTLE_INTERVAL_SECONDS", "0")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_state(monkeypatch, tmp_path):
+    """
+    Every test gets its own durable store, and none inherits the developer's
+    authentication settings -- otherwise the suite would write into data/ and
+    behave differently on a machine with KUBEMEDIC_REQUIRE_AUTH exported.
+    """
+    from agent import store
+
+    monkeypatch.setenv("KUBEMEDIC_STATE_DB", str(tmp_path / "state.db"))
+    monkeypatch.setenv("KUBEMEDIC_TICKET_DB", str(tmp_path / "tickets.db"))
+    for name in ("KUBEMEDIC_REQUIRE_AUTH", "KUBEMEDIC_API_TOKENS",
+                 "KUBEMEDIC_ENABLE_PRESENTER_TOOLS"):
+        monkeypatch.delenv(name, raising=False)
+    store.reset_store()
+    yield
+    store.reset_store()

@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -37,6 +38,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agent.adapters import collect_agent_evidence, tickets_to_references
+from agent import auth
+from agent.auth import Principal, require_presenter_tools, require_role
 from agent.audit import record_decision, write_record
 from agent.correlation import correlate
 from agent.executor import execute
@@ -49,6 +52,7 @@ from agent.models import (
 )
 from agent.pipeline import plan_remediation, request_revision
 from agent.reasoning import run_analysis
+from agent.store import get_store
 from agent.verification import verify, wait_for_recovery
 
 log = logging.getLogger("kubemedic.api")
@@ -56,6 +60,19 @@ log = logging.getLogger("kubemedic.api")
 DEFAULT_NAMESPACE = os.getenv("KUBEMEDIC_NAMESPACE", "opspilot")
 DEFAULT_DEPLOYMENT = os.getenv("KUBEMEDIC_DEPLOYMENT", "ticket-booking")
 DEFAULT_SERVICE = os.getenv("KUBEMEDIC_SERVICE", "ticket-booking")
+
+
+def allowed_namespaces() -> set[str]:
+    """
+    Namespaces an incident may be opened against.
+
+    Read at call time so it can be changed without a restart. The default is the
+    one watched namespace: a request body must not be able to point evidence
+    collection and remediation at any namespace the process's credentials
+    happen to reach.
+    """
+    raw = os.getenv("KUBEMEDIC_ALLOWED_NAMESPACES") or DEFAULT_NAMESPACE
+    return {n.strip() for n in raw.split(",") if n.strip()}
 
 app = FastAPI(
     title="KubeMedic Agent API",
@@ -67,8 +84,34 @@ app = FastAPI(
     ),
 )
 
-# incident_id -> Incident
+# incident_id -> Incident. A cache in front of agent/store.py, which is the
+# durable copy: every mutation is written through, and a restart reloads from it.
 _INCIDENTS: dict[str, Incident] = {}
+
+# One in-flight execution per incident. Execution is check-then-act on the
+# incident's state, so two concurrent requests could otherwise both pass the
+# approval check before either had moved the state on.
+_EXEC_LOCKS: dict[str, threading.Lock] = {}
+_EXEC_LOCKS_GUARD = threading.Lock()
+
+
+def _exec_lock(incident_id: str) -> threading.Lock:
+    with _EXEC_LOCKS_GUARD:
+        return _EXEC_LOCKS.setdefault(incident_id, threading.Lock())
+
+
+def _persist(incident: Incident) -> None:
+    """Write through to the durable store. A failure here must not be silent."""
+    _INCIDENTS[incident.incident_id] = incident
+    try:
+        get_store().save(incident)
+    except Exception as exc:
+        log.error("[API] could not persist %s: %s", incident.incident_id, exc)
+        raise HTTPException(
+            503,
+            detail={"error": "persistence_failed",
+                    "message": f"Could not record incident state: {exc}"},
+        ) from exc
 
 # Minimal operator console, served from this same process so there is exactly
 # one thing to start when checking the system. static/ is plain HTML, CSS and
@@ -170,6 +213,14 @@ def _summary(inc: Incident) -> IncidentSummary:
 def _require(incident_id: str) -> Incident:
     incident = _INCIDENTS.get(incident_id)
     if incident is None:
+        try:
+            incident = get_store().get(incident_id)
+        except Exception as exc:
+            log.error("[API] could not read %s from the store: %s", incident_id, exc)
+            incident = None
+        if incident is not None:
+            _INCIDENTS[incident_id] = incident
+    if incident is None:
         raise HTTPException(404, detail=f"Unknown incident {incident_id}")
     return incident
 
@@ -191,7 +242,7 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/cluster")
-def cluster_status() -> dict[str, Any]:
+def cluster_status(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
     """Live cluster state. Never a canned response — if it cannot be read, it says so."""
     if _DEMO["active"]:
         cluster = _DEMO["cluster"]
@@ -262,7 +313,7 @@ def _fixture_cluster():
 
 
 @app.get("/api/demo")
-def demo_status() -> dict[str, Any]:
+def demo_status(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
     from agent.k8s_client import is_cluster_reachable
 
     reachable, detail = is_cluster_reachable()
@@ -278,7 +329,7 @@ def demo_status() -> dict[str, Any]:
 
 
 @app.post("/api/demo/start")
-def demo_start() -> dict[str, Any]:
+def demo_start(_: Principal = Depends(require_presenter_tools)) -> dict[str, Any]:
     """
     Reset the fixture to the broken state and file the three tickets a watcher
     would file. Returns nothing that has been reasoned about yet -- creating
@@ -305,7 +356,7 @@ def demo_start() -> dict[str, Any]:
 
 
 @app.post("/api/demo/stop")
-def demo_stop() -> dict[str, Any]:
+def demo_stop(_: Principal = Depends(require_presenter_tools)) -> dict[str, Any]:
     _DEMO.update({"active": False, "cluster": None, "tickets": []})
     _INCIDENTS.clear()
     return {"demo_active": False}
@@ -320,7 +371,7 @@ def demo_stop() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @app.post("/api/live/inject")
-def live_inject() -> dict[str, Any]:
+def live_inject(_: Principal = Depends(require_presenter_tools)) -> dict[str, Any]:
     """Ship the bad image at the live cluster. Reversible by rollback."""
     from agent import demo_tooling
 
@@ -334,7 +385,7 @@ def live_inject() -> dict[str, Any]:
 
 
 @app.post("/api/live/watch")
-def live_watch() -> dict[str, Any]:
+def live_watch(_: Principal = Depends(require_presenter_tools)) -> dict[str, Any]:
     """
     One watcher pass. Reports what it observed as well as what it filed --
     "0 filed" and a broken watcher look identical otherwise.
@@ -348,7 +399,7 @@ def live_watch() -> dict[str, Any]:
 
 
 @app.post("/api/live/reset")
-def live_reset() -> dict[str, Any]:
+def live_reset(_: Principal = Depends(require_presenter_tools)) -> dict[str, Any]:
     """Restore the healthy image and resolve open tickets."""
     from agent import demo_tooling
 
@@ -362,7 +413,9 @@ def live_reset() -> dict[str, Any]:
 
 
 @app.get("/api/tickets")
-def list_tickets(status: str | None = None) -> list[dict[str, Any]]:
+def list_tickets(
+    status: str | None = None, _: Principal = Depends(require_role("viewer"))
+) -> list[dict[str, Any]]:
     """Real tickets from the store. No fabrication."""
     if _DEMO["active"]:
         return [
@@ -374,7 +427,9 @@ def list_tickets(status: str | None = None) -> list[dict[str, Any]]:
         ]
 
     from mcp_server import tickets as ticket_store
+    from mcp_server.db import init_db
 
+    init_db()                    # idempotent; a fresh volume has no table yet
     return [t.model_dump(mode="json") for t in ticket_store.list_tickets(status=status)]
 
 
@@ -383,7 +438,9 @@ def list_tickets(status: str | None = None) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 @app.post("/api/incidents", response_model=IncidentSummary, status_code=201)
-def create_incident(body: CreateIncidentRequest) -> IncidentSummary:
+def create_incident(
+    body: CreateIncidentRequest, principal: Principal = Depends(require_role("approver"))
+) -> IncidentSummary:
     """
     Collect evidence, correlate the open tickets, ask IBM Bob, build a plan.
 
@@ -396,8 +453,21 @@ def create_incident(body: CreateIncidentRequest) -> IncidentSummary:
         evidence = collect_evidence(_DEMO["cluster"])
         references = list(_DEMO.get("tickets", []))
     else:
+        if body.namespace not in allowed_namespaces():
+            raise HTTPException(
+                400,
+                detail={
+                    "error": "namespace_not_allowed",
+                    "message": (
+                        f"Namespace {body.namespace!r} is not in "
+                        "KUBEMEDIC_ALLOWED_NAMESPACES."
+                    ),
+                },
+            )
         from mcp_server import tickets as ticket_store
+        from mcp_server.db import init_db
 
+        init_db()
         try:
             evidence = collect_agent_evidence(
                 body.namespace, body.deployment, body.service
@@ -421,17 +491,30 @@ def create_incident(body: CreateIncidentRequest) -> IncidentSummary:
     if incident.state != IncidentState.BOB_UNAVAILABLE:
         incident = plan_remediation(incident)
 
-    _INCIDENTS[incident.incident_id] = incident
+    incident.audit_log.append(
+        {"step": "incident_opened", "by": principal.identity}
+    )
+    _persist(incident)
     return _summary(incident)
 
 
 @app.get("/api/incidents", response_model=list[IncidentSummary])
-def list_incidents() -> list[IncidentSummary]:
-    return [_summary(i) for i in _INCIDENTS.values()]
+def list_incidents(
+    _: Principal = Depends(require_role("viewer")),
+) -> list[IncidentSummary]:
+    merged = dict(_INCIDENTS)
+    try:
+        for stored in get_store().list():
+            merged.setdefault(stored.incident_id, stored)
+    except Exception as exc:
+        log.error("[API] could not list stored incidents: %s", exc)
+    return [_summary(i) for i in merged.values()]
 
 
 @app.get("/api/incidents/{incident_id}")
-def get_incident(incident_id: str) -> dict[str, Any]:
+def get_incident(
+    incident_id: str, _: Principal = Depends(require_role("viewer"))
+) -> dict[str, Any]:
     """
     The whole incident: evidence, correlation, Bob's hypotheses and root cause,
     the plan, the decision, execution, verification and the audit log. This is
@@ -441,7 +524,11 @@ def get_incident(incident_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/incidents/{incident_id}/review", response_model=IncidentSummary)
-def review_incident(incident_id: str, body: ReviewRequest) -> IncidentSummary:
+def review_incident(
+    incident_id: str,
+    body: ReviewRequest,
+    principal: Principal = Depends(require_role("approver")),
+) -> IncidentSummary:
     """
     The human approval gate.
 
@@ -465,20 +552,25 @@ def review_incident(incident_id: str, body: ReviewRequest) -> IncidentSummary:
             },
         )
 
+    # With auth on, the approver is who the token says they are. The body's
+    # `approver` is only honoured in development, where there is no token.
+    approver = principal.identity if auth.auth_required() else body.approver
     try:
         human = HumanDecision(
-            decision=decision, approver=body.approver, feedback=body.feedback
+            decision=decision, approver=approver, feedback=body.feedback
         )
         incident = record_decision(incident, human)
     except ValueError as exc:
         raise HTTPException(409, detail=str(exc)) from exc
 
-    _INCIDENTS[incident.incident_id] = incident
+    _persist(incident)
     return _summary(incident)
 
 
 @app.post("/api/incidents/{incident_id}/revise", response_model=IncidentSummary)
-def revise_incident(incident_id: str) -> IncidentSummary:
+def revise_incident(
+    incident_id: str, principal: Principal = Depends(require_role("approver"))
+) -> IncidentSummary:
     """
     Ask Bob for a revised plan that answers the reviewer's objection.
 
@@ -492,13 +584,15 @@ def revise_incident(incident_id: str) -> IncidentSummary:
     except ValueError as exc:
         raise HTTPException(409, detail=str(exc)) from exc
 
-    _INCIDENTS[incident.incident_id] = incident
+    _persist(incident)
     return _summary(incident)
 
 
 @app.post("/api/incidents/{incident_id}/execute")
 def execute_incident(
-    incident_id: str, cluster=Depends(get_cluster)
+    incident_id: str,
+    cluster=Depends(get_cluster),
+    principal: Principal = Depends(require_role("approver")),
 ) -> dict[str, Any]:
     """
     Perform the approved action, then verify recovery independently.
@@ -510,6 +604,24 @@ def execute_incident(
     """
     incident = _require(incident_id)
 
+    lock = _exec_lock(incident_id)
+    if not lock.acquire(blocking=False):
+        raise HTTPException(
+            409,
+            detail={"error": "execution_in_progress",
+                    "message": "This incident is already being executed."},
+        )
+    try:
+        return _execute_locked(incident, cluster, principal)
+    finally:
+        lock.release()
+
+
+def _execute_locked(incident: Incident, cluster, principal: Principal) -> dict[str, Any]:
+    if incident.state == IncidentState.APPROVED:
+        incident.audit_log.append(
+            {"step": "execute_requested", "by": principal.identity}
+        )
     try:
         incident, result = execute(incident, cluster)
     except ValueError as exc:
@@ -535,7 +647,7 @@ def execute_incident(
         incident, verification = verify(incident, cluster)
 
     record_path = write_record(incident)
-    _INCIDENTS[incident.incident_id] = incident
+    _persist(incident)
 
     return {
         "incident": _summary(incident).model_dump(),
@@ -546,10 +658,32 @@ def execute_incident(
 
 
 @app.get("/api/incidents/{incident_id}/record")
-def get_record(incident_id: str) -> dict[str, Any]:
+def get_record(
+    incident_id: str, _: Principal = Depends(require_role("viewer"))
+) -> dict[str, Any]:
     """The audit artifact for this incident, built from its current state."""
     incident = _require(incident_id)
     return IncidentRecord.from_incident(incident).model_dump(mode="json")
+
+
+@app.get("/api/incidents/{incident_id}/events")
+def incident_events(
+    incident_id: str, _: Principal = Depends(require_role("viewer"))
+) -> dict[str, Any]:
+    """The incident's audit events as chained in the durable store."""
+    _require(incident_id)
+    return {"incident_id": incident_id, "events": get_store().events(incident_id)}
+
+
+@app.get("/api/audit/verify")
+def audit_verify(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
+    """
+    Recompute the audit hash chain. `head` is worth recording somewhere the
+    database's writer cannot reach: it commits to every event before it.
+    """
+    store = get_store()
+    intact, broken_at = store.verify_chain()
+    return {"intact": intact, "broken_at_seq": broken_at, "head": store.chain_head()}
 
 
 # ---------------------------------------------------------------------------
@@ -565,34 +699,46 @@ def get_record(incident_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @app.get("/incidents", response_model=list[IncidentSummary])
-def list_incidents_alias() -> list[IncidentSummary]:
-    return list_incidents()
+def list_incidents_alias(
+    principal: Principal = Depends(require_role("viewer")),
+) -> list[IncidentSummary]:
+    return list_incidents(principal)
 
 
 @app.get("/incidents/{incident_id}")
-def get_incident_alias(incident_id: str) -> dict[str, Any]:
-    return get_incident(incident_id)
+def get_incident_alias(
+    incident_id: str, principal: Principal = Depends(require_role("viewer"))
+) -> dict[str, Any]:
+    return get_incident(incident_id, principal)
 
 
 @app.post("/incidents/{incident_id}/decision", response_model=IncidentSummary)
-def review_incident_alias(incident_id: str, body: ReviewRequest) -> IncidentSummary:
-    return review_incident(incident_id, body)
+def review_incident_alias(
+    incident_id: str,
+    body: ReviewRequest,
+    principal: Principal = Depends(require_role("approver")),
+) -> IncidentSummary:
+    return review_incident(incident_id, body, principal)
 
 
 @app.post("/incidents/{incident_id}/execute")
 def execute_incident_alias(
-    incident_id: str, cluster=Depends(get_cluster)
+    incident_id: str,
+    cluster=Depends(get_cluster),
+    principal: Principal = Depends(require_role("approver")),
 ) -> dict[str, Any]:
-    return execute_incident(incident_id, cluster)
+    return execute_incident(incident_id, cluster, principal)
 
 
 @app.post("/incidents/{incident_id}/revise", response_model=IncidentSummary)
-def revise_incident_alias(incident_id: str) -> IncidentSummary:
-    return revise_incident(incident_id)
+def revise_incident_alias(
+    incident_id: str, principal: Principal = Depends(require_role("approver"))
+) -> IncidentSummary:
+    return revise_incident(incident_id, principal)
 
 
 @app.get("/health/ai")
-def health_ai() -> dict[str, Any]:
+def health_ai(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
     """
     Which engine will answer, and why.
 
@@ -646,7 +792,9 @@ class SelectProviderRequest(BaseModel):
 
 
 @app.post("/api/provider/select")
-def select_provider(body: SelectProviderRequest) -> dict[str, Any]:
+def select_provider(
+    body: SelectProviderRequest, _: Principal = Depends(require_presenter_tools)
+) -> dict[str, Any]:
     """
     Switch the reasoning engine at runtime.
 
@@ -697,7 +845,7 @@ def select_provider(body: SelectProviderRequest) -> dict[str, Any]:
 
 
 @app.get("/api/provider")
-def provider() -> dict[str, Any]:
+def provider(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
     """
     Which reasoning engine is active, whether each is configured, and how each
     has performed this process.
@@ -715,7 +863,7 @@ def provider() -> dict[str, Any]:
 
 
 @app.get("/api/limits")
-def limits() -> dict[str, Any]:
+def limits(_: Principal = Depends(require_role("viewer"))) -> dict[str, Any]:
     """Bounds a reviewer should know about before they start rejecting plans."""
     from agent.providers import configured_provider_name, provider_names
 
@@ -726,10 +874,13 @@ def limits() -> dict[str, Any]:
         "allowed_actions": [
             "rollback_deployment", "restart_deployment", "scale_workload",
         ],
-        "state_is_in_process": True,
+        "state_is_in_process": False,
+        "auth": auth.describe(),
+        "allowed_namespaces": sorted(allowed_namespaces()),
         "note": (
-            "Incidents live in memory and are lost on restart. Audit records "
-            "in records/ are the durable artifact."
+            "Incidents and their audit trail are persisted to KUBEMEDIC_STATE_DB "
+            "and survive a restart. The audit trail is a hash chain; "
+            "GET /api/audit/verify checks it."
         ),
     }
 
@@ -753,15 +904,18 @@ def _port_holder(host: str, port: int) -> int | None:
 
     try:
         if sys.platform == "win32":
+            # Developer-console diagnostic only (naming who holds the port); fixed
+            # argv, no shell, no input from a request.
             out = subprocess.run(
-                ["netstat", "-ano"], capture_output=True, text=True, timeout=10
+                ["netstat", "-ano"],  # noqa: S607
+                capture_output=True, text=True, timeout=10
             ).stdout
             for line in out.splitlines():
                 if f":{port} " in line and "LISTENING" in line:
                     return int(line.split()[-1])
         else:
             out = subprocess.run(
-                ["lsof", "-ti", f"tcp:{port}"],
+                ["lsof", "-ti", f"tcp:{port}"],  # noqa: S607
                 capture_output=True, text=True, timeout=10,
             ).stdout.strip()
             if out:
@@ -777,6 +931,19 @@ def main() -> None:  # pragma: no cover
     host = os.getenv("KUBEMEDIC_API_HOST", "127.0.0.1")
     port = int(os.getenv("KUBEMEDIC_API_PORT", "8100"))
 
+    if auth.auth_required() and not auth.load_tokens():
+        print(
+            "KUBEMEDIC_REQUIRE_AUTH is set but KUBEMEDIC_API_TOKENS holds no "
+            "valid token. Refusing to start.", file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if not auth.auth_required() and host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            f"WARNING: binding {host} with authentication OFF. Anyone who can "
+            "reach this port can approve and execute. Set KUBEMEDIC_REQUIRE_AUTH=true.",
+            file=sys.stderr,
+        )
+
     holder = _port_holder(host, port)
     if holder is not None:
         who = f"process {holder}" if holder > 0 else "another process"
@@ -788,7 +955,7 @@ def main() -> None:  # pragma: no cover
             f"Port {port} is already in use by {who}.",
             "",
             f"  Stop it:         {kill}",
-            f"  Or use another:  KUBEMEDIC_API_PORT=8101 python -m agent.api",
+            "  Or use another:  KUBEMEDIC_API_PORT=8101 python -m agent.api",
             "",
             "If that is an older KubeMedic server, the console it serves is",
             "running the code it was started with, not the code on disk.",
