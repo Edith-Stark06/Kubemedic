@@ -12,11 +12,24 @@ let current = null;
 
 // ------------------------------------------------------------------ helpers
 
-async function api(path, options) {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+// The API token lives in sessionStorage only: it is gone when the tab closes and
+// is never written to the page, the URL, or a cookie.
+const TOKEN_KEY = "kubemedic.token";
+const getToken = () => { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } };
+const setToken = (v) => { try { v ? sessionStorage.setItem(TOKEN_KEY, v) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
+
+async function api(path, options, retried = false) {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { ...options, headers: { ...headers, ...((options || {}).headers || {}) } });
+  if (res.status === 401 && !retried) {
+    const entered = window.prompt("This KubeMedic API needs an access token:");
+    if (entered) {
+      setToken(entered.trim());
+      return api(path, options, true);
+    }
+  }
   let body = null;
   try { body = await res.json(); } catch { /* empty body is fine */ }
   if (!res.ok) {
@@ -42,6 +55,8 @@ function toast(message, kind = "") {
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const notAssessed = () => `<span class="muted">not assessed</span>`;
 
 const kv = (k, v) =>
   `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${v}</span></div>`;
@@ -255,7 +270,15 @@ async function showIncident(id) {
     ${kv("action", badge(p.action, "info"))}
     ${kv("target", esc(p.target))}
     ${kv("parameters", esc(JSON.stringify(p.action_parameters || {})))}
-    ${kv("reversible", badge(String(p.reversible), p.reversible ? "ok" : "warn"))}
+    <div class="muted" style="font-size:12.5px;margin:12px 0 4px">Impact assessment,
+      written by the reasoning engine. Anything it did not assess is shown as such.</div>
+    ${kv("risk", p.risk ? badge(p.risk, p.risk === "low" ? "ok" : p.risk === "medium" ? "warn" : "bad") : notAssessed())}
+    ${kv("reversible", p.reversible === true ? badge("yes", "ok") : p.reversible === false ? badge("no", "bad") : notAssessed())}
+    ${kv("blast radius", p.blast_radius ? esc(p.blast_radius) : notAssessed())}
+    ${kv("expected effect", p.expected_effect ? esc(p.expected_effect) : notAssessed())}
+    ${kv("how recovery will be checked", (p.verification_plan || []).length
+        ? (p.verification_plan || []).map((s) => `<div>${esc(s)}</div>`).join("") : notAssessed())}
+    ${p.risk_explanation ? kv("what could go wrong", esc(p.risk_explanation)) : ""}
     ${p.reason ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(p.reason)}</div>` : ""}` : "";
 
   const reviewable = ["PENDING_APPROVAL", "ANALYSED"].includes(d.state);
