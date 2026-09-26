@@ -166,7 +166,7 @@ class TestLaunching:
 
         from agent.providers import ibm_bob
 
-        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
+        shim = r"C:\Program Files\bobshell\bob.cmd"
         monkeypatch.setattr(ibm_bob.os, "name", "nt")
         monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: "/usr/bin/node")
 
@@ -180,7 +180,7 @@ class TestLaunching:
     def test_windows_shim_falls_back_when_the_entrypoint_is_missing(self, monkeypatch):
         from agent.providers import ibm_bob
 
-        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
+        shim = r"C:\Program Files\bobshell\bob.cmd"
         monkeypatch.setattr(ibm_bob.os, "name", "nt")
         monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: "/usr/bin/node")
 
@@ -189,7 +189,7 @@ class TestLaunching:
     def test_no_node_falls_back_to_the_shim(self, monkeypatch):
         from agent.providers import ibm_bob
 
-        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
+        shim = r"C:\Program Files\bobshell\bob.cmd"
         monkeypatch.setattr(ibm_bob.os, "name", "nt")
         monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: None)
 
