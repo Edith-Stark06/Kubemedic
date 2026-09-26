@@ -109,7 +109,7 @@ Remaining passing tests cover model defaults and shapes
 | D-05 | `dashboard/app.py` | `/api/records` reads agent records | lists them | **FAIL** — reads `agent/records`, agent writes `records/` | MISSING |
 | O-01 | `orchestrator/evidence.py` | Evidence functions against a cluster | typed results | UNVERIFIED — needs a cluster | MISSING |
 | E-01 | end-to-end | reject, feedback, revise, approve, execute, verify | full loop | **MISSING** — the revise stage does not exist | MISSING |
-| E-02 | `scripts/validate.sh` | E2E harness runs | exit 0 | **FAIL** — hardcoded `/c/Users/shivraj/...` paths; calls a file absent from this repo | — |
+| E-02 | `scripts/validate.sh` | E2E harness runs | exit 0 | **FAIL** — hardcoded `<local-path>` paths; calls a file absent from this repo | — |
 | B-01 | `agent/bob.py` | Live Bob returns a valid analysis | `analysis_source="ibm-bob"` | **UNVERIFIED — never observed** | MISSING |
 
 ---

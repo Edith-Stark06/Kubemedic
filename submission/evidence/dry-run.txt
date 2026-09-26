@@ -63,7 +63,7 @@ KubeMedic deterministic dry run
 
 [13] Incident closed
       final state = RESOLVED
-      record      = C:\Users\shivraj\AppData\Local\Temp\dr\INC-20260830T124602-001.json
+      record      = <tmp>/INC-20260830T124602-001.json
 
 ====================================================================
   incident ID    = INC-20260830T124602-001

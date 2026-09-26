@@ -2,7 +2,7 @@
 
 **Source:** `IBM TechXchange 2026 Pre-conference Dev Day Hackathon OFFICIAL
 RULES`, 15 pages, read from
-`Desktop/Devops/opspilot/33893b2e0869f45c5249d408.pdf`. Quotations below are
+`<local-archive>/33893b2e0869f45c5249d408.pdf`. Quotations below are
 from that document. Only requirements the rules actually state are listed.
 
 Status values: `COMPLIANT` · `PARTIAL` · `GAP` · `NEEDS VERIFICATION`.

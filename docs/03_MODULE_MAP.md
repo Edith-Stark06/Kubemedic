@@ -270,7 +270,7 @@ Line counts are from `wc -l` on branch `shivraj/mcp-repo-ci` @ `1448908`.
 | `workload/Dockerfile` | Builds `ticketbooking:1.0` / `:1.1` | READY |
 | `scripts/inject_incident.sh` | `kubectl set image` to `:1.1` | READY |
 | `scripts/reset_healthy.sh` | Reverse | READY |
-| `scripts/validate.sh` | E2E harness | **BROKEN** — hardcodes `/c/Users/shivraj/...` paths and calls `orchestrator/validate_incident.py`, absent from this repo |
+| `scripts/validate.sh` | E2E harness | **BROKEN** — hardcodes `<local-path>` paths and calls `orchestrator/validate_incident.py`, absent from this repo |
 | `.bob/` (21 files) | Modes, skills, personas, rules, `mcp.json` | READY |
 | `AGENTS.md` | Standing instructions for Bob sessions | READY |
 | `tests/` (968 lines) | 62 tests, all targeting `agent/` | READY |

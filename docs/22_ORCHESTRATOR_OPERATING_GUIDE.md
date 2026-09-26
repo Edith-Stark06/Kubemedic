@@ -33,7 +33,7 @@ The chain is Requirement → Architecture → Module → Code → Test → Docs 
 - [ ] `python -c "import dashboard.app"` succeeds
 - [ ] `git grep "from orchestrator"` — expected empty after `MCP-003`
 - [ ] `git ls-files | grep -E "\.db$|\.env$|\.venv|__pycache__"` — empty
-- [ ] `git grep -n "C:/Users\|/c/Users"` — empty
+- [ ] no developer-local absolute paths in the tree (the CI hygiene job checks this)
 - [ ] No safety property weakened: allowlist enum, illegal transitions,
       `require_approval()`, dual-signal verification
 - [ ] Docs updated in the same commit as the behaviour

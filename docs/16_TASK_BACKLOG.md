@@ -122,7 +122,7 @@ REQUIREMENTS. Missing any one risks the entry.
   - *Reason:* `agent/` declares no dependencies at all; pydantic and pytest are undeclared.
 - [x] **REPO-003** — README with real setup steps *(45 min)* — currently one line
 - [x] **REPO-004** — Fix `scripts/validate.sh` absolute paths *(30 min)*
-  - *Reason:* hardcodes `/c/Users/shivraj/Desktop/Devops/opspilot/...` and calls `orchestrator/validate_incident.py`, absent from this repo. `AGENTS.md` forbids committing absolute local paths.
+  - *Reason:* hardcodes `<local-archive>/...` and calls `orchestrator/validate_incident.py`, absent from this repo. `AGENTS.md` forbids committing absolute local paths.
 - [x] **CI-001** — GitHub Actions: install, compile, pytest, import checks *(45 min)*
 - [ ] **CI-002** — Branch protection on `main`, **after** `ramana` merges *(15 min)*
 - [x] **MCP-006** — `json.dumps` tool results instead of `str()` *(10 min)*

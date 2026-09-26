@@ -3,7 +3,7 @@
 Everything here happens in the IBM Bob application. None of it can be done from
 code, which is why it is the part most likely to be left until it is too late.
 
-**Bob is at** `C:\Users\shivraj\AppData\Local\Programs\IBM Bob\bin\bobide.CMD`
+**Bob is at** `<bob-install>/bin/bobide.CMD`
 — that is where `agent/bob.py` found it.
 
 Ordered by value. **B1 is the one that changes the submission most.**
@@ -32,7 +32,7 @@ profile and serves eight read-only tools.
 ### Do this
 
 1. **Open the repo as a Bob workspace.**
-   `C:\Users\shivraj\Desktop\Devops\Kubemedic`
+   `<repo>`
 2. **Confirm the MCP server connected.** Bob should list the
    `kubemedic-evidence` server with these tools and no others:
    `get_workload_status`, `get_pods`, `get_events`, `get_recent_changes`,

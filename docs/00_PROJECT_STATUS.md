@@ -97,7 +97,7 @@ correct and tested is unreachable from the UI.
   Verified by direct call. This breaks the `update_ticket_status` MCP tool for
   every scalar field.
 - `dashboard/app.py` imports symbols that no longer exist (above).
-- `scripts/validate.sh` hardcodes `/c/Users/shivraj/Desktop/Devops/opspilot/...`
+- `scripts/validate.sh` hardcodes `<local-archive>/...`
   and calls `orchestrator/validate_incident.py`, which is not in this repo.
 
 ### What is duplicated

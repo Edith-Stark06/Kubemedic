@@ -127,5 +127,5 @@ Bob report: check it for credentials and absolute local paths before
 committing it.
 
 **Currently violated:** `data/kubemedic.db` is tracked, and
-`scripts/validate.sh` contains `/c/Users/shivraj/...` absolute paths. Both are
+`scripts/validate.sh` contains `<local-path>` absolute paths. Both are
 in `16_TASK_BACKLOG.md`.

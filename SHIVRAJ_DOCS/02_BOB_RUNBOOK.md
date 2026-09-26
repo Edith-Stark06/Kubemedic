@@ -10,12 +10,12 @@ depends on Bob is done. Prompts are copy-paste.
 ## Before you start
 
 ```bash
-cd ~/Desktop/Devops/Kubemedic
+cd <repo>
 git checkout main && git pull          # 238 tests, everything merged
 bash scripts/reset_healthy.sh          # clean baseline
 ```
 
-Open `C:\Users\shivraj\Desktop\Devops\Kubemedic` as a Bob workspace.
+Open `<repo>` as a Bob workspace.
 
 **Do not tell Bob to read `AGENTS.md` or `.bob/`.** It loads them from the
 workspace. Whether that happens by itself is part of what session 1 checks.

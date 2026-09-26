@@ -98,7 +98,7 @@ the approve branch with fakes; `test_rejection_stops_before_execution` covers
 the reject branch and stops there.
 
 `scripts/validate.sh` was written to be this harness. It is broken —
-hardcoded `/c/Users/shivraj/...` paths and a call to
+hardcoded `<local-path>` paths and a call to
 `orchestrator/validate_incident.py`, which is not in this repository. Rewrite
 it once the API exists. Task `E2E-001`.
 
