@@ -86,6 +86,24 @@ def run_analysis(
         log.error("[REASONING] Bob output invalid: %s", exc)
         return incident, analysis
 
+    invented = _invented_ticket_ids(analysis, incident)
+    if invented:
+        # A model that cites tickets it was never given is inventing evidence.
+        # Its conclusions cannot be trusted, so none of them are used.
+        ua = unavailable_analysis(
+            "analysis cites ticket ids that were not in the evidence: "
+            + ", ".join(invented)
+        )
+        analysis = BobAnalysis.model_validate(ua)
+        incident.transition(IncidentState.BOB_UNAVAILABLE)
+        incident.analysis = analysis
+        incident.audit_log.append(
+            {"step": "analysis_rejected", "reason": "fabricated_ticket_ids",
+             "ticket_ids": invented}
+        )
+        log.error("[REASONING] analysis rejected, invented tickets: %s", invented)
+        return incident, analysis
+
     if analysis.is_unavailable:
         incident.transition(IncidentState.BOB_UNAVAILABLE)
     else:
@@ -98,3 +116,15 @@ def run_analysis(
         analysis.hypotheses[0].confidence if analysis.hypotheses else "n/a",
     )
     return incident, analysis
+
+
+def _invented_ticket_ids(analysis: BobAnalysis, incident: Incident) -> list[str]:
+    """Ticket ids the analysis names that the incident was never given."""
+    if analysis.correlation is None:
+        return []
+    known = {ticket.ticket_id for ticket in incident.tickets}
+    cited = [
+        *analysis.correlation.member_tickets,
+        *analysis.correlation.excluded_tickets,
+    ]
+    return sorted({ticket_id for ticket_id in cited if ticket_id not in known})

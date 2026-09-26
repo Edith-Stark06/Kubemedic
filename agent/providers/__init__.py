@@ -244,7 +244,15 @@ def _env(name: str, default: str = "") -> str:
 
 
 def fallback_enabled() -> bool:
-    return _env("AI_FALLBACK_ENABLED", "true") not in ("false", "0", "no")
+    """
+    Off unless an operator turns it on.
+
+    A fallback sends the incident's evidence -- pod states, event messages,
+    ticket text -- to a different vendor than the one that was configured. That
+    is a data-governance decision, so it is opt-in, not something that happens
+    because the first engine had a bad minute.
+    """
+    return _env("AI_FALLBACK_ENABLED", "false") in ("true", "1", "yes")
 
 
 def primary_name() -> str:

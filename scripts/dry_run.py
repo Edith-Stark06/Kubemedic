@@ -198,7 +198,7 @@ def seed_tickets(now: datetime) -> list[TicketReference]:
 # Reasoning
 # ---------------------------------------------------------------------------
 
-def reason(evidence: EvidenceSnapshot, tickets, feedback: list[str] | None):
+def reason(evidence: EvidenceSnapshot, tickets, feedback: list[str] | None, incident=None):
     """
     Ask the configured provider. If none can answer, fall back to a scripted
     analysis so the rest of the lifecycle is still demonstrable -- and say so,
@@ -209,6 +209,12 @@ def reason(evidence: EvidenceSnapshot, tickets, feedback: list[str] | None):
     payload = evidence.model_dump(mode="json")
     dumped = [t.model_dump(mode="json") for t in tickets]
     result = analyze_with_fallback(payload, dumped, feedback)
+
+    if incident is not None:
+        # The full provider entry -- provider, duration, invocation, outcome and
+        # error -- for EVERY call, so a record shows each time the engine was
+        # asked and what happened, not just the last answer.
+        incident.audit_log.append(result.audit_entry())
 
     if result.ok:
         detail(f"provider    = {result.provider_id} (live)")
@@ -325,11 +331,9 @@ def main() -> int:
         detail(f"  - {basis}")
 
     step("AI analysis")
-    analysis, provider = reason(evidence, incident.tickets, None)
+    analysis, provider = reason(evidence, incident.tickets, None, incident=incident)
     incident.analysis = analysis
     incident.transition(IncidentState.ANALYSED)
-    incident.audit_log.append({"stage": "REASONING", "provider": provider,
-                               "analysis_source": analysis.analysis_source})
     detail(f"root cause  = {analysis.root_cause.statement[:66]}")
     detail(f"confidence  = {analysis.root_cause.confidence}")
 
@@ -370,8 +374,12 @@ def main() -> int:
         incident.revision_count += 1
         incident.plan = None
         incident.human_decision = None
+        incident.audit_log.append({
+            "step": "revision_requested", "revision": incident.revision_count,
+            "feedback_so_far": list(incident.feedback_history),
+        })
         analysis, provider = reason(evidence, incident.tickets,
-                                    incident.feedback_history)
+                                    incident.feedback_history, incident=incident)
         incident.analysis = analysis
         incident.transition(IncidentState.ANALYSED)
         incident = plan_remediation(incident)
