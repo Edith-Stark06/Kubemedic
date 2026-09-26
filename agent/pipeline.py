@@ -64,6 +64,25 @@ def plan_remediation(incident: Incident) -> Incident:
         )
         return incident
 
+    workload = incident.evidence.deployment_name if incident.evidence else None
+    if analysis.action_target != workload:
+        # The model chose the target; nothing about the evidence made it the
+        # workload this incident is about. A plan against any other workload is
+        # refused before a human is asked to approve it.
+        log.error(
+            "[PIPELINE] %s: plan refused, target %r is not the incident workload %r",
+            incident.incident_id, analysis.action_target, workload,
+        )
+        incident.audit_log.append(
+            {
+                "step": "plan_refused",
+                "reason": "proposed target is not the workload this incident is about",
+                "proposed_target": analysis.action_target,
+                "incident_workload": workload,
+            }
+        )
+        return incident
+
     try:
         plan = RemediationPlan.from_analysis(analysis)
     except ValueError as exc:

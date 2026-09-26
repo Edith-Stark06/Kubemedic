@@ -80,6 +80,13 @@ def execute(
             f"Incident {incident.incident_id} has no remediation plan"
         )
 
+    workload = incident.evidence.deployment_name if incident.evidence else None
+    if plan.target != workload:
+        raise ValueError(
+            f"Refusing to execute: plan target {plan.target!r} is not the "
+            f"workload this incident is about ({workload!r})"
+        )
+
     incident.transition(IncidentState.EXECUTING)
     incident.audit_log.append(
         {

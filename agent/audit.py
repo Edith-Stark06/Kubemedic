@@ -56,6 +56,11 @@ def record_decision(incident: Incident, decision: HumanDecision) -> Incident:
             f"Expected one of {[s.value for s in allowed_states]}."
         )
 
+    if incident.plan is None:
+        raise ValueError(
+            "Cannot record decision: this incident has no remediation plan to decide on"
+        )
+
     # HumanDecision model already validated feedback-on-reject
     incident.human_decision = decision
     incident.audit_log.append(

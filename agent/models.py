@@ -170,6 +170,15 @@ class BobAnalysis(BaseModel):
     requires_human_approval: bool = True
     notes_for_reviewer: str | None = None
 
+    # Impact assessment. Authored by the reasoning engine, never defaulted by
+    # the system: a field the engine did not supply stays empty / None and is
+    # shown to the reviewer as "not assessed" rather than as a reassuring guess.
+    blast_radius: str = ""
+    risk: Literal["low", "medium", "high"] | None = None
+    reversible: bool | None = None
+    expected_effect: str = ""
+    verification_plan: list[str] = Field(default_factory=list)
+
     # Evidence-unavailable shape extras
     missing_signals: list[str] = Field(default_factory=list)
     partial_evidence: list[str] = Field(default_factory=list)
@@ -224,14 +233,23 @@ class RemediationPlan(BaseModel):
     action: AllowedAction
     target: str
     action_parameters: dict[str, Any] = Field(default_factory=dict)
+    # Impact assessment, copied from the analysis. None / empty means the
+    # engine did not assess it -- never a system default dressed as a finding.
     blast_radius: str = ""
-    risk: Literal["low", "medium", "high"] = "medium"
-    reversible: bool = True
+    risk: Literal["low", "medium", "high"] | None = None
+    reversible: bool | None = None
     expected_effect: str = ""
     verification_plan: list[str] = Field(default_factory=list)
     reason: str = ""
     risk_explanation: str = ""
     notes_for_reviewer: str | None = None
+
+    @property
+    def impact_assessed(self) -> bool:
+        return bool(
+            self.blast_radius or self.expected_effect or self.verification_plan
+            or self.risk is not None or self.reversible is not None
+        )
 
     @classmethod
     def from_analysis(cls, analysis: BobAnalysis) -> "RemediationPlan":
@@ -248,6 +266,11 @@ class RemediationPlan(BaseModel):
             action=analysis.recommended_action,
             target=analysis.action_target,
             action_parameters=analysis.action_parameters,
+            blast_radius=analysis.blast_radius,
+            risk=analysis.risk,
+            reversible=analysis.reversible,
+            expected_effect=analysis.expected_effect,
+            verification_plan=list(analysis.verification_plan),
             reason=analysis.reason,
             risk_explanation=analysis.risk_explanation,
             notes_for_reviewer=analysis.notes_for_reviewer,

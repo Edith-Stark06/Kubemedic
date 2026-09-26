@@ -134,32 +134,24 @@ class LiveKubernetesClient:
                 f"Revision {target.revision} has no recorded image; cannot roll back"
             )
 
-        deployment = self._apps.read_namespaced_deployment(name, namespace)
-        container = deployment.spec.template.spec.containers[0].name
-
-        patch = {
-            "spec": {
-                "template": {
-                    "spec": {
-                        "containers": [{"name": container, "image": target.image}]
-                    }
-                }
-            },
-            "metadata": {
-                "annotations": {
-                    "kubernetes.io/change-cause": (
-                        f"KubeMedic rollback to revision {target.revision} "
-                        f"({target.image}) after human approval"
-                    )
-                }
-            },
-        }
+        template = self._template_for_revision(name, namespace, target.revision)
 
         log.info(
-            "[K8S] rollback %s/%s: revision %s -> %s (%s)",
+            "[K8S] rollback %s/%s: revision %s -> %s (%s), restoring the full pod template",
             namespace, name, current_rev, target.revision, target.image,
         )
-        updated = self._apps.patch_namespaced_deployment(name, namespace, patch)
+        # A JSON patch that REPLACES the template, as `kubectl rollout undo`
+        # does. A strategic merge would only add and overwrite: an env var or
+        # volume introduced by the bad revision would survive the "rollback".
+        updated = self._apps.patch_namespaced_deployment(
+            name, namespace,
+            [{"op": "replace", "path": "/spec/template", "value": template}],
+        )
+        self._record_change_cause(
+            name, namespace,
+            f"KubeMedic rollback to revision {target.revision} "
+            f"({target.image}) after human approval",
+        )
 
         return {
             "action": "rollback_deployment",
@@ -168,11 +160,54 @@ class LiveKubernetesClient:
             "from_revision": current_rev,
             "to_revision": target.revision,
             "image": target.image,
+            "restored": "full pod template",
             "observed_generation": updated.status.observed_generation,
             "new_revision": (updated.metadata.annotations or {}).get(
                 REVISION_ANNOTATION
             ),
         }
+
+    def _template_for_revision(self, name: str, namespace: str, revision: Any) -> dict:
+        """
+        The complete pod template the Deployment ran at `revision`, read from
+        the ReplicaSet that recorded it. Refuses rather than guessing: if the
+        ReplicaSet is gone there is nothing faithful to restore.
+        """
+        deployment = self._apps.read_namespaced_deployment(name, namespace)
+        match = deployment.spec.selector.match_labels or {}
+        selector = ",".join(f"{k}={v}" for k, v in sorted(match.items()))
+        replica_sets = self._apps.list_namespaced_replica_set(
+            namespace, label_selector=selector
+        )
+        found = next(
+            (
+                rs for rs in replica_sets.items
+                if str((rs.metadata.annotations or {}).get(REVISION_ANNOTATION))
+                == str(revision)
+            ),
+            None,
+        )
+        if found is None:
+            raise ValueError(
+                f"No ReplicaSet recorded revision {revision} of {namespace}/{name}; "
+                "cannot restore its pod template"
+            )
+        template = client.ApiClient().sanitize_for_serialization(found.spec.template)
+        # The controller adds this label to tell ReplicaSets apart; it is not
+        # part of the desired template.
+        labels = (template.get("metadata") or {}).get("labels") or {}
+        labels.pop("pod-template-hash", None)
+        return template
+
+    def _record_change_cause(self, name: str, namespace: str, cause: str) -> None:
+        """Best effort: the rollback has already happened, so this cannot undo it."""
+        try:
+            self._apps.patch_namespaced_deployment(
+                name, namespace,
+                {"metadata": {"annotations": {"kubernetes.io/change-cause": cause}}},
+            )
+        except Exception as exc:                 # pragma: no cover - defensive
+            log.warning("[K8S] rollback applied but change-cause not recorded: %s", exc)
 
     # -- restart ----------------------------------------------------------
 
@@ -228,8 +263,12 @@ class LiveKubernetesClient:
             replicas = int(replicas)
         except (TypeError, ValueError):
             raise ValueError(f"replicas must be an integer, got {replicas!r}")
-        if replicas < 0:
-            raise ValueError(f"replicas must be >= 0, got {replicas}")
+        if replicas < 1:
+            raise ValueError(
+                f"replicas must be >= 1, got {replicas}. Scaling to zero takes "
+                "the service down; that is an outage decision for a human, not "
+                "a remediation this system performs."
+            )
         if replicas > MAX_REPLICAS:
             raise ValueError(
                 f"replicas {replicas} exceeds the KubeMedic ceiling of "

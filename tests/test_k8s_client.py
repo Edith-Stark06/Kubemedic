@@ -14,6 +14,16 @@ import pytest
 from agent.k8s_client import MAX_REPLICAS, LiveEvidenceReader, LiveKubernetesClient
 
 
+def _template(image, env=None):
+    return {
+        "metadata": {"labels": {"app": "ticket-booking", "pod-template-hash": "abc123"}},
+        "spec": {"containers": [{
+            "name": "app", "image": image,
+            "env": [{"name": k, "value": v} for k, v in (env or {}).items()],
+        }]},
+    }
+
+
 class FakeAppsApi:
     """Records patches instead of applying them."""
 
@@ -23,6 +33,24 @@ class FakeAppsApi:
         self._replicas = replicas
         self._container = container
         self._generation = generation
+        self.selector_used = None
+        # revision -> pod template (plain dicts, as the API serialises them)
+        self.templates = {
+            "1": _template("ticketbooking:0.9"),
+            "2": _template("ticketbooking:1.0", env={"FEATURE_X": "off"}),
+            "3": _template("ticketbooking:1.1", env={"FEATURE_X": "on", "NEW": "1"}),
+        }
+
+    def list_namespaced_replica_set(self, namespace, label_selector=None):
+        self.selector_used = label_selector
+        items = []
+        for revision, template in self.templates.items():
+            items.append(SimpleNamespace(
+                metadata=SimpleNamespace(
+                    annotations={"deployment.kubernetes.io/revision": revision}),
+                spec=SimpleNamespace(template=template),
+            ))
+        return SimpleNamespace(items=items)
 
     def read_namespaced_deployment(self, name, namespace):
         return SimpleNamespace(
@@ -30,6 +58,7 @@ class FakeAppsApi:
                 annotations={"deployment.kubernetes.io/revision": "3"}
             ),
             spec=SimpleNamespace(
+                selector=SimpleNamespace(match_labels={"app": "ticket-booking"}),
                 replicas=self._replicas,
                 template=SimpleNamespace(
                     spec=SimpleNamespace(
@@ -104,8 +133,47 @@ class TestRollback:
         assert result["to_revision"] == "2"
         assert result["image"] == "ticketbooking:1.0"
         _, _, patch = api.patches[0]
-        containers = patch["spec"]["template"]["spec"]["containers"]
-        assert containers[0]["image"] == "ticketbooking:1.0"
+        (op,) = patch
+        assert op["op"] == "replace" and op["path"] == "/spec/template"
+        assert op["value"]["spec"]["containers"][0]["image"] == "ticketbooking:1.0"
+        assert result["restored"] == "full pod template"
+
+    def test_restores_the_whole_template_not_just_the_image(self, k8s, api, monkeypatch):
+        """An env var added by the bad revision must not survive the rollback."""
+        _revisions(monkeypatch, [
+            _rev("3", "ticketbooking:1.1", is_current=True),
+            _rev("2", "ticketbooking:1.0"),
+        ])
+        k8s.rollback_deployment("ticket-booking", "opspilot")
+        env = api.patches[0][2][0]["value"]["spec"]["containers"][0]["env"]
+        assert env == [{"name": "FEATURE_X", "value": "off"}]
+
+    def test_controller_hash_label_is_not_restored(self, k8s, api, monkeypatch):
+        _revisions(monkeypatch, [
+            _rev("3", "ticketbooking:1.1", is_current=True),
+            _rev("2", "ticketbooking:1.0"),
+        ])
+        k8s.rollback_deployment("ticket-booking", "opspilot")
+        labels = api.patches[0][2][0]["value"]["metadata"]["labels"]
+        assert "pod-template-hash" not in labels
+
+    def test_replicaset_is_found_by_the_deployments_own_selector(self, k8s, api, monkeypatch):
+        _revisions(monkeypatch, [
+            _rev("3", "ticketbooking:1.1", is_current=True),
+            _rev("2", "ticketbooking:1.0"),
+        ])
+        k8s.rollback_deployment("ticket-booking", "opspilot")
+        assert api.selector_used == "app=ticket-booking"
+
+    def test_missing_replicaset_is_refused_not_guessed(self, k8s, api, monkeypatch):
+        _revisions(monkeypatch, [
+            _rev("3", "ticketbooking:1.1", is_current=True),
+            _rev("2", "ticketbooking:1.0"),
+        ])
+        del api.templates["2"]
+        with pytest.raises(ValueError, match="cannot restore"):
+            k8s.rollback_deployment("ticket-booking", "opspilot")
+        assert api.patches == []
 
     def test_explicit_revision_is_honoured(self, k8s, monkeypatch):
         _revisions(monkeypatch, [
@@ -123,7 +191,7 @@ class TestRollback:
             _rev("2", "ticketbooking:1.0"),
         ])
         k8s.rollback_deployment("ticket-booking", "opspilot")
-        _, _, patch = api.patches[0]
+        _, _, patch = api.patches[1]
         cause = patch["metadata"]["annotations"]["kubernetes.io/change-cause"]
         assert "KubeMedic rollback" in cause
         assert "human approval" in cause
@@ -174,11 +242,16 @@ class TestScale:
         assert result["to_replicas"] == 4
         assert api.scale_patches[0][2] == {"spec": {"replicas": 4}}
 
-    def test_zero_is_allowed(self, k8s):
-        assert k8s.scale_workload("ticket-booking", "opspilot", 0)["to_replicas"] == 0
+    def test_zero_is_refused_because_it_is_an_outage(self, k8s, api):
+        with pytest.raises(ValueError, match="outage decision"):
+            k8s.scale_workload("ticket-booking", "opspilot", 0)
+        assert api.scale_patches == []
+
+    def test_one_is_the_floor(self, k8s):
+        assert k8s.scale_workload("ticket-booking", "opspilot", 1)["to_replicas"] == 1
 
     def test_negative_refused(self, k8s):
-        with pytest.raises(ValueError, match=">= 0"):
+        with pytest.raises(ValueError, match=">= 1"):
             k8s.scale_workload("ticket-booking", "opspilot", -1)
 
     def test_above_ceiling_refused(self, k8s):
