@@ -82,6 +82,7 @@ class ReasoningProvider(Protocol):
         evidence: dict[str, Any],
         tickets: list[dict[str, Any]],
         feedback: list[str] | None = None,
+        runbook: str | None = None,
     ) -> ProviderResult: ...
 
 
@@ -121,6 +122,7 @@ class BaseProvider:
         evidence: dict[str, Any],
         tickets: list[dict[str, Any]],
         feedback: list[str] | None = None,
+        runbook: str | None = None,
     ) -> ProviderResult:
         started = time.monotonic()
         self.calls += 1
@@ -130,7 +132,7 @@ class BaseProvider:
         if not configured:
             return self._fail("not_configured", reason, started)
 
-        prompt = build_prompt(evidence, tickets, feedback)
+        prompt = build_prompt(evidence, tickets, feedback, runbook)
 
         try:
             raw = self._invoke(prompt)

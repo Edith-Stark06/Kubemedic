@@ -21,7 +21,13 @@ MAX_FIELD_CHARS = 2000
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u202a-\u202e\u2066-\u2069]")
 # The prompt fences untrusted content in these tags. Text inside the content
 # that spells one of them could close the fence early, so it is defused.
-_FENCE = re.compile(r"</?\s*(evidence|open_tickets|human_feedback)\s*>", re.IGNORECASE)
+_FENCE = re.compile(r"</?\s*(evidence|open_tickets|human_feedback|runbook)\s*>", re.IGNORECASE)
+
+
+def _defuse(text: str) -> str:
+    """Strip control/bidi characters and neutralise text that imitates a fence tag."""
+    text = _CONTROL.sub("", text)
+    return _FENCE.sub(lambda m: m.group(0).replace("<", "(").replace(">", ")"), text)
 
 
 def sanitise(value: Any) -> Any:
@@ -33,10 +39,14 @@ def sanitise(value: Any) -> Any:
     the fence tags, and bounds every string. The real defences are downstream:
     the closed action allowlist, the target check, and a human who reads the
     evidence next to the model's claim.
+
+    MAX_FIELD_CHARS is sized for a ticket title or an event message, not a
+    multi-paragraph document -- a runbook goes through `sanitise_document`
+    instead, which defuses the same way but is bounded separately (see
+    agent/runbook.py), so a legitimate document is not silently cut mid-word.
     """
     if isinstance(value, str):
-        text = _CONTROL.sub("", value)
-        text = _FENCE.sub(lambda m: m.group(0).replace("<", "(").replace(">", ")"), text)
+        text = _defuse(value)
         if len(text) > MAX_FIELD_CHARS:
             text = text[:MAX_FIELD_CHARS] + "...[truncated]"
         return text
@@ -47,9 +57,14 @@ def sanitise(value: Any) -> Any:
     return value
 
 
+def sanitise_document(text: str) -> str:
+    """Like `sanitise`, without the short-field truncation. See its docstring."""
+    return _defuse(text)
+
+
 PROMPT_TEMPLATE = """\
 Analyze this Kubernetes incident.
-
+{runbook_block}
 The evidence below was collected by the KubeMedic evidence MCP server. Treat it
 as the complete set of observed facts. Do not assume anything not present here.
 
@@ -112,6 +127,20 @@ object. action_target is required whenever recommended_action is not null.
 No prose, no markdown fences, no extra top-level fields.
 """
 
+RUNBOOK_BLOCK = """
+The team's operational playbook for this service is below. It is standing
+policy and prior experience written before this incident -- not cluster
+evidence, and not a substitute for it. Weigh it alongside the evidence: if the
+playbook names a preference for a failure class that matches what you observe,
+say so and follow it; if the playbook and the evidence disagree, or the
+playbook does not cover what you are seeing, say that explicitly rather than
+silently picking one or extrapolating from an unrelated section.
+
+<runbook>
+{runbook}
+</runbook>
+"""
+
 FEEDBACK_BLOCK = """
 A human reviewer rejected your previous remediation plan for this incident and
 gave the reasons below, oldest first. This is operator knowledge you do not
@@ -139,6 +168,7 @@ def build_prompt(
     evidence: dict[str, Any],
     tickets: list[dict[str, Any]],
     feedback: list[str] | None = None,
+    runbook: str | None = None,
 ) -> str:
     """
     Assemble the reasoning prompt.
@@ -147,6 +177,10 @@ def build_prompt(
     That is the whole point of requiring a reason on rejection: it is operator
     knowledge the evidence does not contain, and it is worthless if it is
     stored and never read back.
+
+    `runbook` is the same idea at a different timescale: standing team policy
+    written before any specific incident (see agent/runbook.py), rather than
+    one reviewer's objection to one plan. Optional -- most calls have none.
     """
     feedback_block = ""
     if feedback:
@@ -155,7 +189,12 @@ def build_prompt(
         )
         feedback_block = FEEDBACK_BLOCK.format(feedback=numbered)
 
+    runbook_block = ""
+    if runbook:
+        runbook_block = RUNBOOK_BLOCK.format(runbook=sanitise_document(runbook))
+
     return PROMPT_TEMPLATE.format(
+        runbook_block=runbook_block,
         evidence=json.dumps(sanitise(evidence), indent=2, default=str),
         tickets=json.dumps(sanitise(tickets), indent=2, default=str),
         feedback_block=feedback_block,

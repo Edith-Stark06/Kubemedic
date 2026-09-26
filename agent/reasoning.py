@@ -22,11 +22,17 @@ def bob_analyze(evidence, tickets, feedback=None):
     Call the active reasoning provider.
 
     Kept under this name because it is the seam the whole test suite
-    patches by string. The provider behind it is selected by
-    KUBEMEDIC_REASONING_PROVIDER; nothing else in the pipeline knows or
-    cares which engine answered.
+    patches by string -- with a real evidence/tickets/feedback signature,
+    since a mocked Bob has no reason to also accept a runbook. The provider
+    behind it is selected by KUBEMEDIC_REASONING_PROVIDER; nothing else in
+    the pipeline knows or cares which engine answered.
+
+    Loads the configured runbook itself (see agent/runbook.py) rather than
+    taking it as a parameter here, so this seam's signature -- and every
+    existing test double for it -- is unaffected by whether the "document
+    understanding" feature is in play.
     """
-    return analyze_with_fallback(evidence, tickets, feedback)
+    return analyze_with_fallback(evidence, tickets, feedback, load_runbook())
 from agent.models import (
     BobAnalysis,
     EvidenceSnapshot,
@@ -34,6 +40,7 @@ from agent.models import (
     IncidentState,
     TicketReference,
 )
+from agent.runbook import load_runbook
 
 log = logging.getLogger("kubemedic.reasoning")
 

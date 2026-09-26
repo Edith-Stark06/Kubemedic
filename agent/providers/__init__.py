@@ -276,6 +276,7 @@ def analyze_with_fallback(
     evidence: dict[str, Any],
     tickets: list[dict[str, Any]],
     feedback: list[str] | None = None,
+    runbook: str | None = None,
 ) -> "ProviderResult":
     """
     Try the primary engine; on failure fall to the configured fallback.
@@ -291,7 +292,7 @@ def analyze_with_fallback(
     storm against someone else's service.
     """
     primary = get_provider(primary_name())
-    result = primary.analyze(evidence, tickets, feedback)
+    result = primary.analyze(evidence, tickets, feedback, runbook)
     if result.ok:
         return result
 
@@ -327,7 +328,7 @@ def analyze_with_fallback(
         "AI_FALLBACK_ENABLED=true.",
         primary.id, result.error, secondary.id,
     )
-    fallback_result = secondary.analyze(evidence, tickets, feedback)
+    fallback_result = secondary.analyze(evidence, tickets, feedback, runbook)
     fallback_result.invocation = [
         *fallback_result.invocation,
         f"fallback-from={primary.id}",
