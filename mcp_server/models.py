@@ -39,18 +39,18 @@ class Ticket(BaseModel):
     service: str
     created_at: str
     updated_at: str
-    signals: List[str] = Field(default_factory=list)
-    related_ticket_ids: List[str] = Field(default_factory=list)
-    diagnosis: Optional[Dict] = None
-    plan: Optional[Dict] = None
-    resolution: Optional[Dict] = None
+    signals: list[str] = Field(default_factory=list)
+    related_ticket_ids: list[str] = Field(default_factory=list)
+    diagnosis: Optional[dict] = None
+    plan: Optional[dict] = None
+    resolution: Optional[dict] = None
 
 class Alert(BaseModel):
     source: str
     rule_name: str
     severity: str
     message: str
-    signals: List[str] = Field(default_factory=list)
+    signals: list[str] = Field(default_factory=list)
     namespace: str
     deployment: str
     timestamp: str

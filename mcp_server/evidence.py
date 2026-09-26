@@ -9,6 +9,8 @@ the cluster for evidence.
 from __future__ import annotations
 
 import datetime as _dt
+import os
+import threading
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -18,6 +20,15 @@ from kubernetes.client.rest import ApiException
 DEFAULT_NAMESPACE = "opspilot"
 DEFAULT_DEPLOYMENT = "ticket-booking"
 DEFAULT_SERVICE = "ticket-booking"
+
+# Upper bound on events read from the API per call. Listing an entire busy
+# namespace unbounded is slow and memory-heavy; recent events are what matter.
+EVENT_SCAN_LIMIT = 500
+
+# Where the application answers its health check through the Service proxy.
+# Both are deployment facts, not constants of nature.
+HEALTH_PATH = os.getenv("KUBEMEDIC_HEALTH_PATH", "health")
+HEALTH_PORT = os.getenv("KUBEMEDIC_HEALTH_PORT", "http")
 
 REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 CHANGE_CAUSE_ANNOTATION = "kubernetes.io/change-cause"
@@ -117,10 +128,37 @@ class EvidenceSnapshot(BaseModel):
 
 # ---- client ---------------------------------------------------------------
 
+_clients: tuple | None = None
+_clients_lock = threading.Lock()
+
+
 def _load():
-    """Load kubeconfig (rancher-desktop context) and return (AppsV1, CoreV1)."""
-    config.load_kube_config()
-    return client.AppsV1Api(), client.CoreV1Api()
+    """
+    Return (AppsV1, CoreV1), building them once per process.
+
+    In-cluster service-account config is tried first so KubeMedic can run as a
+    pod; the user's kubeconfig is the fallback for a workstation. Clients are
+    cached because every evidence call used to re-parse kubeconfig and open a
+    new connection pool.
+    """
+    global _clients
+    if _clients is not None:
+        return _clients
+    with _clients_lock:
+        if _clients is None:
+            try:
+                config.load_incluster_config()
+            except config.ConfigException:
+                config.load_kube_config()
+            _clients = (client.AppsV1Api(), client.CoreV1Api())
+    return _clients
+
+
+def reset_clients() -> None:
+    """Drop the cached clients. Tests, and a caller that has changed context."""
+    global _clients
+    with _clients_lock:
+        _clients = None
 
 
 # ---- read-only tools ------------------------------------------------------
@@ -154,25 +192,52 @@ def inspect_workload(namespace: str = DEFAULT_NAMESPACE,
     )
 
 
+def _selector_for(deployment: str, namespace: str) -> str:
+    """
+    The label selector the Deployment itself uses to find its pods.
+
+    Assuming `app=<deployment name>` is a naming convention, not a Kubernetes
+    rule, and gives silently empty evidence on any workload that labels
+    differently. Falls back to that convention only when the Deployment cannot
+    be read.
+    """
+    apps, _ = _load()
+    try:
+        d = apps.read_namespaced_deployment(deployment, namespace)
+        match = (d.spec.selector.match_labels or {}) if d.spec and d.spec.selector else {}
+        if match:
+            return ",".join(f"{k}={v}" for k, v in sorted(match.items()))
+    except ApiException:
+        pass
+    return f"app={deployment}"
+
+
 def inspect_pods(namespace: str = DEFAULT_NAMESPACE,
                  app: str = DEFAULT_DEPLOYMENT) -> list[PodState]:
     _, core = _load()
-    pods = core.list_namespaced_pod(namespace, label_selector=f"app={app}")
+    pods = core.list_namespaced_pod(
+        namespace, label_selector=_selector_for(app, namespace)
+    )
     out: list[PodState] = []
     for p in pods.items:
-        cs = (p.status.container_statuses or [None])[0]
+        statuses = p.status.container_statuses or []
+        # A pod is ready only when every container is; the reason reported is
+        # that of the first container that is not, so a failing sidecar is not
+        # hidden behind a healthy main container.
+        unready = next((cs for cs in statuses if not cs.ready), None)
+        focus = unready or (statuses[0] if statuses else None)
         reason = message = None
-        if cs and cs.state:
-            if cs.state.waiting:
-                reason, message = cs.state.waiting.reason, cs.state.waiting.message
-            elif cs.state.terminated:
-                reason, message = cs.state.terminated.reason, cs.state.terminated.message
+        if focus and focus.state:
+            if focus.state.waiting:
+                reason, message = focus.state.waiting.reason, focus.state.waiting.message
+            elif focus.state.terminated:
+                reason, message = focus.state.terminated.reason, focus.state.terminated.message
         del_ts = p.metadata.deletion_timestamp
         out.append(PodState(
             name=p.metadata.name, phase=p.status.phase,
-            ready=bool(cs and cs.ready),
-            restarts=int(cs.restart_count) if cs else 0,
-            image=cs.image if cs else None, reason=reason, message=message,
+            ready=bool(statuses) and all(cs.ready for cs in statuses),
+            restarts=sum(int(cs.restart_count or 0) for cs in statuses),
+            image=focus.image if focus else None, reason=reason, message=message,
             deletion_timestamp=_iso(del_ts), terminating=del_ts is not None,
         ))
     return out
@@ -181,11 +246,16 @@ def inspect_pods(namespace: str = DEFAULT_NAMESPACE,
 def inspect_events(namespace: str = DEFAULT_NAMESPACE,
                    name: Optional[str] = None, limit: int = 15) -> list[EventItem]:
     _, core = _load()
-    evs = core.list_namespaced_event(namespace)
+    evs = core.list_namespaced_event(namespace, limit=EVENT_SCAN_LIMIT)
     items: list[EventItem] = []
     for e in evs.items:
         obj = e.involved_object
-        if name and obj and name not in (obj.name or ""):
+        # Pods and ReplicaSets of a Deployment are named `<deployment>-<hash>`,
+        # so a prefix match finds them without also matching an unrelated
+        # workload whose name merely contains this one.
+        if name and obj and not (
+            obj.name == name or (obj.name or "").startswith(f"{name}-")
+        ):
             continue
         items.append(EventItem(
             type=e.type, reason=e.reason, message=e.message, count=e.count or 1,
@@ -224,8 +294,8 @@ def recent_changes(namespace: str = DEFAULT_NAMESPACE,
 
 def check_application_health(namespace: str = DEFAULT_NAMESPACE,
                              service: str = DEFAULT_SERVICE,
-                             path: str = "health",
-                             port: str = "http") -> HealthResult:
+                             path: str = HEALTH_PATH,
+                             port: str = HEALTH_PORT) -> HealthResult:
     """Independent app-health signal via the API server's service proxy.
 
     No port-forward needed: the API server proxies to a Ready endpoint of the

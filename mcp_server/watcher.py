@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 
 from mcp_server import tickets
@@ -77,14 +78,14 @@ class Anomaly:
 class KubeWatcher:
     def __init__(
         self,
-        namespace="opspilot",
-        deployment="ticket-booking",
-        service="ticket-booking",
+        namespace=None,
+        deployment=None,
+        service=None,
         poll_interval=15,
     ):
-        self.namespace = namespace
-        self.deployment = deployment
-        self.service = service
+        self.namespace = namespace or os.getenv("KUBEMEDIC_NAMESPACE", "opspilot")
+        self.deployment = deployment or os.getenv("KUBEMEDIC_DEPLOYMENT", "ticket-booking")
+        self.service = service or os.getenv("KUBEMEDIC_SERVICE", self.deployment)
         self.poll_interval = poll_interval
         self._running = False
         self._task = None

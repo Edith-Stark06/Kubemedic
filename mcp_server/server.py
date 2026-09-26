@@ -317,15 +317,31 @@ def build_server(profile: str | None) -> Server:
     return server
 
 
+def watcher_enabled(profile: str | None) -> bool:
+    """
+    The watcher files tickets, which is a write. On the read-only evidence
+    profile it is off unless KUBEMEDIC_MCP_WATCHER=true: every Bob session that
+    launches this server would otherwise start its own ticket writer, and "the
+    evidence server is read-only" would describe its tool list but not the
+    process.
+    """
+    explicit = (os.getenv("KUBEMEDIC_MCP_WATCHER") or "").strip().lower()
+    if explicit:
+        return explicit in ("1", "true", "yes")
+    return profile != "evidence"
+
+
 async def run(profile: str | None = None) -> None:
     init_db()
     server = build_server(profile)
     watcher = KubeWatcher()
-    watcher.start()
+    if watcher_enabled(profile):
+        watcher.start()
     logger.info(
-        "kubemedic MCP server starting: profile=%s tools=%d",
+        "kubemedic MCP server starting: profile=%s tools=%d watcher=%s",
         profile or "full",
         len(visible_tools(profile)),
+        "on" if watcher_enabled(profile) else "off",
     )
     try:
         async with stdio_server() as (read_stream, write_stream):

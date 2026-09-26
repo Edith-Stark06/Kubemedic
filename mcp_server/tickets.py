@@ -31,7 +31,7 @@ def _row_to_ticket(row) -> Ticket:
         resolution=json.loads(row["resolution"]) if row["resolution"] else None
     )
 
-def create_ticket(title: str, severity: str, namespace: str, deployment: str, service: str, signals: List[str]) -> Ticket:
+def create_ticket(title: str, severity: str, namespace: str, deployment: str, service: str, signals: list[str]) -> Ticket:
     conn = get_connection()
     cursor = conn.cursor()
     now_str = datetime.now(timezone.utc).isoformat()
@@ -64,7 +64,7 @@ def get_ticket(ticket_id: str) -> Optional[Ticket]:
         return _row_to_ticket(row)
     return None
 
-def list_tickets(status: Optional[str] = None, limit: int = 50) -> List[Ticket]:
+def list_tickets(status: Optional[str] = None, limit: int = 50) -> list[Ticket]:
     conn = get_connection()
     cursor = conn.cursor()
     
