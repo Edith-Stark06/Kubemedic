@@ -27,9 +27,23 @@ AGENT_BASE = os.getenv("KUBEMEDIC_AGENT_BASE_URL", "").rstrip("/")
 
 
 def get_adapter() -> "RealAdapter | MockAdapter":
+    """
+    The live agent, or -- only when explicitly asked for -- fixture data.
+
+    With no agent configured this used to fall back to mock incidents without
+    saying so, which put invented evidence and a canned "verification" on the
+    screen of a system whose whole rule is that it never does. Now it refuses,
+    unless KUBEMEDIC_DASHBOARD_MOCK=true is set for offline UI development.
+    """
     if AGENT_BASE:
         return RealAdapter(AGENT_BASE)
-    return MockAdapter()
+    if (os.getenv("KUBEMEDIC_DASHBOARD_MOCK") or "").strip().lower() in ("1", "true", "yes"):
+        return MockAdapter()
+    raise RuntimeError(
+        "KUBEMEDIC_AGENT_BASE_URL is not set, so there is no agent to show. "
+        "Set it, or set KUBEMEDIC_DASHBOARD_MOCK=true for fixture data during "
+        "UI development. The dashboard will not invent incidents on its own."
+    )
 
 
 # ---------------------------------------------------------------------------
