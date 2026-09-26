@@ -45,7 +45,7 @@ human-authorised.
 
 ## Evidence
 
-443 tests run without a cluster. A live k3s run asserts the whole loop: an
+465 tests run without a cluster. A live-cluster run asserts the whole loop: an
 unapproved execution is refused with the cluster unchanged, a reasonless
 rejection is refused, a real rollback executes, and both recovery signals pass.
 During the incident `/health` stays 200 because old pods keep serving; only the

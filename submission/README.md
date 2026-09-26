@@ -22,28 +22,42 @@ Everything in [`evidence/`](evidence/) was produced by running the code.
 | File | What it shows |
 |---|---|
 | `pytest-run.txt` | The suite at the time of an earlier run. Re-run `python -m pytest` for the current count |
-| `validate-run.txt` | **34 assertions, 0 failures, against a live kind cluster, reasoned by IBM Bob** |
-| `INC-20260926T205136-001.json` | The audit record from that run. `analysis_source: "ibm-bob"` |
+| `validate-run-runbook.txt` | **34 assertions, 0 failures, live kind cluster, IBM Bob citing a real operational runbook** |
+| `INC-20260926T213503-001.json` | The audit record from that run. `analysis_source: "ibm-bob"` |
+| `validate-run.txt` | An earlier live-cluster run, same engine, no runbook |
+| `INC-20260926T205136-001.json` | The audit record from that earlier run |
 | `INC-20260926T192815-001.json` | An earlier record, same engine, against the fixture cluster |
 | other `INC-*.json` | Earlier records; `analysis_source` reads `unavailable` or `fixture` |
 
-### What the live record shows, and does not
+### Document understanding: the headline record
 
-`INC-20260926T205136-001.json` is `scripts/validate_incident.py` end to end
-against a real cluster (kind), fallback disabled: the watcher observes the
-injected failure and files real tickets, IBM Bob reasons over the live evidence
-and proposes `rollback_deployment`, a human rejects it without a reason (refused),
-rejects it with one (recorded, cluster unchanged), Bob is asked again and
-proposes the same action, a human approves, the executor performs a real
-rollback restoring the full pod template, and both recovery signals pass on a
-re-read of the cluster.
+`INC-20260926T213503-001.json` is `scripts/validate_incident.py` end to end
+against a real cluster (kind), fallback disabled — plus one addition:
+`docs/RUNBOOK_TICKET_BOOKING.md`, a real operational playbook naming known
+failure classes and which of the three allowed actions the team prefers for
+each, handed to Bob in its own fenced prompt section (`agent/runbook.py`,
+`agent/providers/prompt.py`) alongside the cluster evidence.
 
-**What it does not show:** in this run Bob's first proposal was already the
-correct one, so the human's objection did not change the recommended action —
-only that the loop executes and Bob answers again. It is not evidence that a
-rejection can steer Bob toward a different action; the earlier fixture-cluster
-record (`INC-20260926T192815-001.json`) shows that instead, with a scripted
-objection that names a specific alternative.
+Bob's `reason` field in that record:
+
+> "The playbook explicitly names this failure class (Failure Class 1: readiness
+> regression immediately following a deployment) and mandates
+> rollback_deployment rather than restart_deployment, because a restart would
+> recreate pods on the same broken image and reproduce the identical probe
+> failures."
+
+That is Bob naming the document and its specific rule, not just describing
+what the cluster evidence shows. The rest of the loop is unchanged from the
+earlier live run: watcher-filed tickets, an unapproved-execution refusal, a
+reasonless rejection refused, a rejection with a reason recorded and answered,
+approval, a real rollback restoring the full pod template, both recovery
+signals passing on a re-read of the cluster.
+
+**What it does not show:** Bob's proposal was already correct both before and
+after the human's rejection here, so this run does not show the objection
+changing the recommended action. `INC-20260926T192815-001.json` (fixture
+cluster, no runbook) shows that instead, with a scripted objection naming a
+specific alternative that Bob's revised plan follows.
 
 ## Prior work disclosure
 

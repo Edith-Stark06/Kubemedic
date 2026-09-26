@@ -1,0 +1,231 @@
+{
+  "incident_id": "INC-20260926T213503-001",
+  "final_state": "RESOLVED",
+  "tickets": [
+    "TKT-20260926-213503-0388",
+    "TKT-20260926-213503-0302"
+  ],
+  "correlation": {
+    "master_incident_id": "INC-20260926T213503-001",
+    "member_tickets": [
+      "TKT-20260926-213503-0388",
+      "TKT-20260926-213503-0302"
+    ],
+    "excluded_tickets": [],
+    "correlation_basis": [
+      "TKT-20260926-213503-0388 references ticket-booking",
+      "TKT-20260926-213503-0388 created within incident window (2026-09-26T21:35:03.038846+00:00)",
+      "TKT-20260926-213503-0388 describes known failure symptoms",
+      "TKT-20260926-213503-0302 references ticket-booking",
+      "TKT-20260926-213503-0302 created within incident window (2026-09-26T21:35:03.030253+00:00)",
+      "TKT-20260926-213503-0302 describes known failure symptoms"
+    ],
+    "rationale": "2 ticket(s) correlated to deployment ticket-booking."
+  },
+  "analysis_source": "ibm-bob",
+  "bob_analysis": {
+    "schema_version": "1.0",
+    "analysis_source": "ibm-bob",
+    "status": null,
+    "correlation": null,
+    "timeline": [],
+    "hypotheses": [
+      {
+        "rank": 1,
+        "statement": "Deployment of ticketbooking:1.1 (revision 4) introduced a regression: the new image's pods consistently fail the readiness probe with HTTP 500, stalling the rollout. The two healthy v1.0 pods (revision 3) remain serving traffic but the third replica slot is occupied by the failing v1.1 pod, leaving desired replicas unmet.",
+        "confidence": "high",
+        "confidence_reason": "Multiple independent evidence strands converge: (a) rollout history explicitly labels revision 4 'Deploy ticketbooking:1.1 (regression)' with 0 ready_replicas; (b) event record shows 11 readiness probe failures (HTTP 500) on Pod/ticket-booking-596f87b86b-6zt8x running ticketbooking:1.1; (c) the new pod ticket-booking-596f87b86b-gsn4r is still Pending/ContainerCreating, consistent with Kubernetes already having killed and replaced the first v1.1 attempt; (d) application health endpoint returns version '1.0', confirming only v1.0 pods are passing traffic.",
+        "supporting_evidence": [
+          "rollout_history revision 4: image=ticketbooking:1.1, ready_replicas=0, change_cause='Deploy ticketbooking:1.1 (regression)', is_current=true",
+          "Event Warning Unhealthy on Pod/ticket-booking-596f87b86b-6zt8x: 'Readiness probe failed: HTTP probe failed with statuscode: 500', count=11, last_seen=2026-09-26T20:52:28",
+          "Pod ticket-booking-596f87b86b-gsn4r: phase=Pending, ready=false, image=ticketbooking:1.1, reason=ContainerCreating",
+          "Workload raw: desired_replicas=3, ready_replicas=2, updated_replicas=1, unavailable_replicas=1, rollout_complete=false, healthy=false",
+          "application_health.body: version='1.0', healthy=True — only v1.0 pods are passing probes",
+          "Tickets TKT-20260926-213503-0302 and TKT-20260926-213503-0388 both flag rollout stalled and pod not ready for the v1.1 replica set"
+        ],
+        "contradicting_evidence": [
+          "Current new pod (ticket-booking-596f87b86b-gsn4r) is only ContainerCreating — it has not yet failed a probe, so technically it is possible it might pass. However the prior v1.1 pod (6zt8x) on the same image already failed 11 probes and was killed, making this highly unlikely to be transient."
+        ],
+        "cheapest_next_check": ""
+      },
+      {
+        "rank": 2,
+        "statement": "The ContainerCreating state of the new v1.1 pod is a transient scheduling delay unrelated to the image, and the pod may yet become ready.",
+        "confidence": "low",
+        "confidence_reason": "The identical image (ticketbooking:1.1) already demonstrated consistent HTTP 500 readiness failure in the immediately preceding pod (6zt8x, 11 failures). A scheduling delay alone does not explain the prior pod's probe failures. Image is confirmed present on the node ('already present on machine'), so pull is not the issue.",
+        "supporting_evidence": [
+          "Event: 'Container image ticketbooking:1.1 already present on machine' for pod 6zt8x — image pull is not a bottleneck"
+        ],
+        "contradicting_evidence": [
+          "Pod 6zt8x (same image, same replica set) failed readiness probe 11 times before being killed — strongly contradicts this being a mere scheduling blip"
+        ],
+        "cheapest_next_check": ""
+      }
+    ],
+    "root_cause": {
+      "statement": "The ticketbooking:1.1 image contains a defect that causes its HTTP health endpoint to return HTTP 500, preventing any pod running that image from passing the Kubernetes readiness probe. This is confirmed by 11 consecutive probe failures on the previous v1.1 pod and zero ready replicas for revision 4 throughout its lifetime.",
+      "confidence": "high",
+      "is_inference": true
+    },
+    "dual_signal_note": "The application_health check returns HTTP 200 and version='1.0', which appears to contradict the deployment's current image being listed as ticketbooking:1.1. This is not a contradiction: the health check hits the Service, which routes only to Ready pods — the two Ready pods are both v1.0 (revision 3). The v1.1 pod is never Ready so it never receives traffic, meaning the health check result reflects v1.0 pod health, not the failing v1.1 revision.",
+    "recommended_action": "rollback_deployment",
+    "action_target": "ticket-booking",
+    "action_parameters": {
+      "to_revision": 3
+    },
+    "reason": "Human feedback required confirming a healthy prior revision exists before acting. Revision 3 (ticketbooking:1.0) is confirmed healthy by the rollout history: change_cause='Restore ticketbooking:1.0 (healthy)', ready_replicas=2, and both surviving pods from that revision (ticket-booking-547698ccbc-fl7g9 and ticket-booking-547698ccbc-gf9sj) are Running, Ready, and have 0 restarts. This satisfies the human reviewer's condition. The playbook explicitly names this failure class (Failure Class 1: readiness regression immediately following a deployment) and mandates rollback_deployment rather than restart_deployment, because a restart would recreate pods on the same broken image (ticketbooking:1.1) and reproduce the identical probe failures. Rolling back to revision 3 restores the last known-good state.",
+    "risk_explanation": "Revision 3 (ticketbooking:1.0) is demonstrably healthy right now — two pods from that revision are passing probes and serving traffic with 0 restarts. Rolling back to it simply adds a third pod of the same image. The only risk is if v1.0 has an unrelated latent issue not visible in current probe results, which the evidence does not suggest. The rollback is reversible via re-deploy of revision 4 or a new image.",
+    "requires_human_approval": true,
+    "notes_for_reviewer": null,
+    "blast_radius": "Affects only the ticket-booking deployment in namespace opspilot. The rollback will scale down the v1.1 replica set (ticket-booking-596f87b86b) to 0 and scale up the v1.0 replica set (ticket-booking-547698ccbc) to the desired 3 replicas. The two currently-Ready v1.0 pods continue serving throughout. No other deployments or namespaces are touched. The downstream payment-service is not affected by a rollback (no scale change).",
+    "risk": "low",
+    "reversible": true,
+    "expected_effect": "Within one rollout cycle: the v1.1 pod (ticket-booking-596f87b86b-gsn4r) is terminated; a third v1.0 pod joins the two already-Ready v1.0 pods; ready_replicas reaches 3/3; rollout_complete becomes true; workload.healthy becomes true; tickets TKT-20260926-213503-0302 and TKT-20260926-213503-0388 resolve.",
+    "verification_plan": [
+      "Confirm ready_replicas == 3 and updated_replicas == 3 on the ticket-booking deployment after the rollback completes",
+      "Confirm all three running pods show image=ticketbooking:1.0 (or docker.io/library/ticketbooking:1.0) and ready=true",
+      "Confirm no pods from replica set ticket-booking-596f87b86b remain Running or Pending",
+      "Confirm application_health returns status_code=200 and version='1.0' (already true, should remain true)",
+      "Confirm no new Warning/Unhealthy events appear for any pod in the ticket-booking-596f87b86b replica set after the rollback",
+      "Confirm rollout_history shows revision 3 (or a new revision pointing to ticketbooking:1.0) as is_current=true with ready_replicas=3"
+    ],
+    "missing_signals": [],
+    "partial_evidence": []
+  },
+  "root_cause": {
+    "statement": "The ticketbooking:1.1 image contains a defect that causes its HTTP health endpoint to return HTTP 500, preventing any pod running that image from passing the Kubernetes readiness probe. This is confirmed by 11 consecutive probe failures on the previous v1.1 pod and zero ready replicas for revision 4 throughout its lifetime.",
+    "confidence": "high",
+    "is_inference": true
+  },
+  "recommended_action": "rollback_deployment",
+  "human_decision": "approved",
+  "rejection_feedback": null,
+  "feedback_history": [
+    "Confirm the rollout history names a healthy revision before acting."
+  ],
+  "revision_count": 1,
+  "executed": true,
+  "verification_outcome": "PASS",
+  "created_at": "2026-09-26T21:35:03.101761Z",
+  "resolved_at": "2026-09-26T21:36:18.412497Z",
+  "audit_log": [
+    {
+      "step": "correlation",
+      "member_tickets": [
+        "TKT-20260926-213503-0388",
+        "TKT-20260926-213503-0302"
+      ],
+      "excluded_tickets": [],
+      "basis": [
+        "TKT-20260926-213503-0388 references ticket-booking",
+        "TKT-20260926-213503-0388 created within incident window (2026-09-26T21:35:03.038846+00:00)",
+        "TKT-20260926-213503-0388 describes known failure symptoms",
+        "TKT-20260926-213503-0302 references ticket-booking",
+        "TKT-20260926-213503-0302 created within incident window (2026-09-26T21:35:03.030253+00:00)",
+        "TKT-20260926-213503-0302 describes known failure symptoms"
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "ibm-bob",
+      "invoked_at": "2026-09-26T21:35:40.983096+00:00",
+      "invocation": [
+        "bob-shell",
+        "run",
+        "mode=kubemedic-reasoner",
+        "max-cost=1.0",
+        "max-turns=3"
+      ],
+      "duration_ms": 37873,
+      "ok": true,
+      "error": null,
+      "analysis_source": "ibm-bob"
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "rejected",
+      "approver": "validator",
+      "timestamp": "2026-09-26T21:35:41.020996+00:00",
+      "feedback": "Confirm the rollout history names a healthy revision before acting."
+    },
+    {
+      "step": "rejection_recorded",
+      "reason": "Confirm the rollout history names a healthy revision before acting.",
+      "executed": false,
+      "feedback_count": 1
+    },
+    {
+      "step": "revision_requested",
+      "revision": 1,
+      "feedback_so_far": [
+        "Confirm the rollout history names a healthy revision before acting."
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "ibm-bob",
+      "invoked_at": "2026-09-26T21:36:13.253187+00:00",
+      "invocation": [
+        "bob-shell",
+        "run",
+        "mode=kubemedic-reasoner",
+        "max-cost=1.0",
+        "max-turns=3"
+      ],
+      "duration_ms": 32196,
+      "ok": true,
+      "error": null,
+      "analysis_source": "ibm-bob"
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "approved",
+      "approver": "validator",
+      "timestamp": "2026-09-26T21:36:13.253403+00:00",
+      "feedback": null
+    },
+    {
+      "step": "execute",
+      "action": "rollback_deployment",
+      "target": "ticket-booking",
+      "parameters": {
+        "to_revision": 3
+      },
+      "started_at": "2026-09-26T21:36:13.253431+00:00"
+    },
+    {
+      "step": "execute_result",
+      "success": true,
+      "message": "rollback_deployment on ticket-booking succeeded",
+      "completed_at": "2026-09-26T21:36:13.314439+00:00"
+    },
+    {
+      "step": "verification",
+      "outcome": "PASS",
+      "signals": [
+        {
+          "name": "rollout_healthy",
+          "passed": true,
+          "detail": "ready=True, updated=2, desired=2"
+        },
+        {
+          "name": "health_endpoint",
+          "passed": true,
+          "detail": "status_code=200, healthy=True"
+        }
+      ],
+      "detail": "Both signals green: rollout healthy and application health OK.",
+      "checked_at": "2026-09-26T21:36:18.412448+00:00"
+    }
+  ]
+}

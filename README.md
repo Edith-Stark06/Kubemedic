@@ -72,7 +72,7 @@ workload/       the demo app; HEALTHY=false is the incident lever
 static/         the operator console: plain HTML/CSS/JS, no build step
 dashboard/      the separate FastAPI incident console (port 8080)
 scripts/        inject, reset, the deterministic dry run, the live validation harness
-tests/          443 tests
+tests/          465 tests
 docs/           architecture, contracts, gaps, compliance
 submission/     contest deliverables and executed evidence
 ```
@@ -90,7 +90,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest
 ```
 
-Expected: `443 passed`. The suite needs no cluster and no credentials — the
+Expected: `465 passed`. The suite needs no cluster and no credentials — the
 Kubernetes API is mocked and every ticket test uses a temporary database.
 
 CI (`.github/workflows/ci.yml`) additionally byte-compiles every module,
@@ -149,6 +149,22 @@ Without any credentials the system still runs — it collects evidence,
 correlates tickets, and reports the analysis unavailable. It produces no plan
 and nothing can be approved. That is the designed behaviour: it reports the
 outage rather than inventing a diagnosis.
+
+## Document understanding: an operational runbook
+
+`docs/RUNBOOK_TICKET_BOOKING.md` is a real, short playbook: known failure
+classes for the demo service, and which of the three allowed actions the team
+prefers for each, and why. `agent/runbook.py` loads it (`KUBEMEDIC_RUNBOOK_PATH`,
+empty string to disable) and `agent/providers/prompt.py` hands it to the
+reasoning engine in its own fenced `<runbook>` section — distinct from cluster
+evidence, with instructions to weigh it rather than obey it blindly, and to say
+so if the two disagree.
+
+Run against IBM Bob live, Bob's `reason` field named the playbook's failure
+class by number and stated its rule directly: *"The playbook explicitly names
+this failure class ... and mandates rollback_deployment rather than
+restart_deployment, because a restart would recreate pods on the same broken
+image."* `submission/evidence/INC-20260926T213503-001.json`.
 
 ## Configuration
 
@@ -335,13 +351,15 @@ trusting it.
 Stated plainly, because a proof of concept that hides its edges is harder to
 evaluate:
 
-- **A live IBM Bob run is recorded.** `submission/evidence/validate-run.txt`
-  and `INC-20260926T205136-001.json` are `scripts/validate_incident.py` against
-  a real cluster with Bob as the engine: 34 assertions, 0 failures,
-  `analysis_source: "ibm-bob"`. Bob's first proposal was already correct in that
-  run, so it does not show a rejection changing the recommended action — an
-  earlier fixture-cluster record does. Running Bob needs `KUBEMEDIC_BOB_API_KEY`
-  in the environment. watsonx auth works but its WML instance is inactive.
+- **A live IBM Bob run is recorded**, with the runbook in play.
+  `submission/evidence/validate-run-runbook.txt` and
+  `INC-20260926T213503-001.json` are `scripts/validate_incident.py` against a
+  real cluster with Bob as the engine: 34 assertions, 0 failures,
+  `analysis_source: "ibm-bob"`. Bob's first proposal was already correct in
+  that run, so it does not show a rejection changing the recommended action —
+  an earlier fixture-cluster record does. Running Bob needs
+  `KUBEMEDIC_BOB_API_KEY` in the environment. watsonx auth works but its WML
+  instance is inactive.
 - **Bob is metered.** Each analysis is capped by `KUBEMEDIC_BOB_MAX_COST`; a
   revision is a second call.
 - **Bob Shell must be installed** where the agent runs. The container image does
