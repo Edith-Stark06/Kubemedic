@@ -1,0 +1,224 @@
+# Running KubeMedic itself in a cluster.
+#
+# The watched workload lives in the `opspilot` namespace (k8s/). KubeMedic runs
+# beside it and is granted exactly what it needs there and nothing else:
+#
+#   read    pods, events, replicasets, deployments, services/proxy
+#   write   patch deployments and deployments/scale         (the three actions)
+#
+# It gets no access to Secrets, ConfigMaps, other namespaces, or any verb beyond
+# these. Compare with a kubeconfig: a kubeconfig is whatever the person who made
+# it could do.
+#
+# Before applying, create the Secret out of band -- never commit its values:
+#
+#   kubectl -n opspilot create secret generic kubemedic-secrets \
+#     --from-literal=KUBEMEDIC_API_TOKENS='alice:approver:<random>,bob:viewer:<random>'
+#
+# Generate tokens with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubemedic
+  namespace: opspilot
+automountServiceAccountToken: true
+---
+# Read-only. This is also the role to bind the MCP evidence server to if it is
+# run as a separate pod, so "Bob's tools are read-only" is true at the API
+# server and not only in the tool list.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubemedic-evidence
+  namespace: opspilot
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list"]
+---
+# The executor's write access: the three allowlisted actions, on Deployments
+# only. `patch` and nothing else -- no create, no delete, no update.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubemedic-remediate
+  namespace: opspilot
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubemedic-evidence
+  namespace: opspilot
+subjects:
+  - kind: ServiceAccount
+    name: kubemedic
+    namespace: opspilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubemedic-evidence
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubemedic-remediate
+  namespace: opspilot
+subjects:
+  - kind: ServiceAccount
+    name: kubemedic
+    namespace: opspilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubemedic-remediate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kubemedic-state
+  namespace: opspilot
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubemedic
+  namespace: opspilot
+  labels:
+    app: kubemedic
+spec:
+  # One writer. The incident store is SQLite on a ReadWriteOnce volume, and
+  # approvals must not be racing across replicas. Scaling out means moving the
+  # store to Postgres first (see docs/PRODUCTION_READINESS_REPORT.md).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kubemedic
+  template:
+    metadata:
+      labels:
+        app: kubemedic
+    spec:
+      serviceAccountName: kubemedic
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kubemedic
+          image: kubemedic:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8100
+          env:
+            - name: KUBEMEDIC_REQUIRE_AUTH
+              value: "true"
+            - name: KUBEMEDIC_NAMESPACE
+              value: opspilot
+            - name: KUBEMEDIC_ALLOWED_NAMESPACES
+              value: opspilot
+            - name: KUBEMEDIC_DEPLOYMENT
+              value: ticket-booking
+            - name: KUBEMEDIC_STATE_DB
+              value: /var/lib/kubemedic/state.db
+            - name: KUBEMEDIC_TICKET_DB
+              value: /var/lib/kubemedic/tickets.db
+            # Evidence leaves for another vendor only if an operator decides so.
+            - name: AI_FALLBACK_ENABLED
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: kubemedic-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/kubemedic
+            - name: records
+              mountPath: /app/records
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: kubemedic-state
+        - name: records
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubemedic
+  namespace: opspilot
+spec:
+  type: ClusterIP
+  selector:
+    app: kubemedic
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Default-deny for the namespace's ingress, then let only same-namespace pods
+# reach KubeMedic. Put an authenticating ingress or a port-forward in front of
+# it for people; the API's own tokens are a second layer, not the only one.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kubemedic-ingress
+  namespace: opspilot
+spec:
+  podSelector:
+    matchLabels:
+      app: kubemedic
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8100

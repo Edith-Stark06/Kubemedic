@@ -1,0 +1,19 @@
+# Lint the code that ships and the tests. Rules are deliberately the
+# correctness-oriented set: real bugs (undefined names, unused imports and
+# variables, bare excepts, mutable defaults), not style opinions.
+target-version = "py312"
+line-length = 120
+extend-exclude = ["dashboard", "workload", "records", "data", ".kubemedic"]
+
+[lint]
+select = ["E9", "F", "B", "S102", "S307", "S602", "S605", "S607", "UP006", "UP007"]
+ignore = [
+    "B008",   # FastAPI's Depends() in defaults is the framework's idiom
+    "B904",   # re-raise inside except: the code already chains where it matters
+    "F401",   # re-exports in __init__ and fixture imports in tests
+    "F811",   # pytest fixtures imported and re-declared as arguments
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B", "S"]
+"scripts/*" = ["S602", "S605", "S607"]
