@@ -176,6 +176,9 @@ class TestAutoResolution:
         monkeypatch.setenv("KUBEMEDIC_IBM_ENABLED", "true")
         monkeypatch.setenv("KUBEMEDIC_BOB_API_KEY", "k")
         monkeypatch.setenv("KUBEMEDIC_BOB_AGENT_ID", "a")
+        # is_configured() also requires Bob Shell to be discoverable; a CI
+        # runner has no reason to have it installed.
+        monkeypatch.setenv("KUBEMEDIC_BOB_BIN", "/usr/bin/bob")
         assert resolve_auto() == "ibm-bob"
 
     def test_prefers_watsonx_over_anthropic(self, monkeypatch):

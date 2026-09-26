@@ -88,7 +88,11 @@ jobs:
       - name: No credentials committed
         run: |
           set -e
+          # tests/* is excluded because it deliberately contains fake
+          # secret-shaped literals to test that they never leak (see
+          # test_usage_never_leaks_a_credential, test_invocation_never_
+          # contains_the_prompt_or_a_key) -- the opposite of a real one.
           bad=$(git grep -nEi '(api[_-]?key|secret|token|password)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9_-]{16,}' -- \
-                  ':!*.md' ':!docs/*' ':!.github/*' || true)
+                  ':!*.md' ':!docs/*' ':!.github/*' ':!tests/*' || true)
           if [ -n "$bad" ]; then echo "possible credential:"; echo "$bad"; exit 1; fi
           echo "no credentials found"

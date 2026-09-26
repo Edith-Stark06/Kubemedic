@@ -157,18 +157,49 @@ class TestLaunching:
         for group in ("read", "edit", "execute", "mcp", "skill", "subagent"):
             assert group in groups
 
-    def test_windows_shim_is_bypassed_so_multiline_prompts_survive(self, tmp_path, monkeypatch):
+    def test_windows_shim_is_bypassed_so_multiline_prompts_survive(self, monkeypatch):
+        # Deliberately not exercised against a real filesystem: the shim path
+        # is a Windows one, and a real Path for a foreign OS refuses to be
+        # instantiated (pathlib.UnsupportedOperation) on whatever host runs
+        # this suite. `exists` is injected instead of relying on one.
+        from pathlib import PureWindowsPath
+
         from agent.providers import ibm_bob
 
-        entry = tmp_path / "node_modules" / "bobshell" / "dist" / "bob.js"
-        entry.parent.mkdir(parents=True)
-        entry.write_text("//")
-        shim = tmp_path / "bob.cmd"
-        shim.write_text("")
+        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
         monkeypatch.setattr(ibm_bob.os, "name", "nt")
         monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: "/usr/bin/node")
 
-        assert ibm_bob.command_prefix(str(shim)) == ["/usr/bin/node", str(entry)]
+        assert ibm_bob._bob_js_entry(shim) == (
+            PureWindowsPath(shim).parent / "node_modules" / "bobshell" / "dist" / "bob.js"
+        )
+        assert ibm_bob.command_prefix(shim, exists=lambda p: True) == [
+            "/usr/bin/node", str(ibm_bob._bob_js_entry(shim)),
+        ]
+
+    def test_windows_shim_falls_back_when_the_entrypoint_is_missing(self, monkeypatch):
+        from agent.providers import ibm_bob
+
+        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
+        monkeypatch.setattr(ibm_bob.os, "name", "nt")
+        monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: "/usr/bin/node")
+
+        assert ibm_bob.command_prefix(shim, exists=lambda p: False) == [shim]
+
+    def test_no_node_falls_back_to_the_shim(self, monkeypatch):
+        from agent.providers import ibm_bob
+
+        shim = r"C:\Users\dev\AppData\Roaming\npm\bob.cmd"
+        monkeypatch.setattr(ibm_bob.os, "name", "nt")
+        monkeypatch.setattr(ibm_bob.shutil, "which", lambda _: None)
+
+        assert ibm_bob.command_prefix(shim, exists=lambda p: True) == [shim]
+
+    def test_non_windows_ignores_the_shim_logic_entirely(self, monkeypatch):
+        from agent.providers import ibm_bob
+
+        monkeypatch.setattr(ibm_bob.os, "name", "posix")
+        assert ibm_bob.command_prefix("/usr/local/bin/bob.cmd") == ["/usr/local/bin/bob.cmd"]
 
     def test_plain_binary_is_used_as_is(self):
         from agent.providers import ibm_bob

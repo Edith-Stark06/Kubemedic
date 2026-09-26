@@ -42,7 +42,7 @@ import json
 import os
 import shutil
 import subprocess
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from agent.providers.base import BaseProvider
 from agent.secrets import get_secrets
@@ -61,7 +61,19 @@ DEFAULT_MAX_TURNS = "3"
 ALL_TOOL_GROUPS = "read,edit,execute,mcp,skill,mode,subagent,subtask,todo"
 
 
-def command_prefix(binary: str) -> list[str]:
+def _bob_js_entry(binary: str) -> PureWindowsPath:
+    """
+    The Node entrypoint a `bob.cmd` / `bob.bat` shim wraps, as a Windows path.
+
+    PureWindowsPath, not Path: this is computed for a target platform that may
+    not be the one running the code (a test exercises the Windows branch on
+    any host), and PurePath objects do no filesystem I/O and never refuse to
+    be constructed for a foreign OS the way a real WindowsPath does.
+    """
+    return PureWindowsPath(binary).parent / "node_modules" / "bobshell" / "dist" / "bob.js"
+
+
+def command_prefix(binary: str, *, exists=os.path.isfile) -> list[str]:
     """
     How to start Bob Shell without a shell in between.
 
@@ -69,11 +81,14 @@ def command_prefix(binary: str) -> list[str]:
     off at its first newline -- the prompt arrived as a single line and Bob
     reported that no evidence had been provided. When a shim is found, run the
     Node entrypoint it wraps directly.
+
+    `exists` is injectable so a test can verify the decision without a real
+    Windows filesystem to check against.
     """
     if os.name == "nt" and binary.lower().endswith((".cmd", ".bat")):
-        entry = Path(binary).parent / "node_modules" / "bobshell" / "dist" / "bob.js"
+        entry = _bob_js_entry(binary)
         node = shutil.which("node")
-        if node and entry.is_file():
+        if node and exists(str(entry)):
             return [node, str(entry)]
     return [binary]
 

@@ -75,7 +75,8 @@ def all_providers(monkeypatch, tmp_path):
     analysis_file.write_text(json.dumps(VALID_ANALYSIS), encoding="utf-8")
     return [
         _configured(IBMBobProvider, monkeypatch,
-                    KUBEMEDIC_BOB_API_KEY="k", KUBEMEDIC_BOB_AGENT_ID="a"),
+                    KUBEMEDIC_BOB_API_KEY="k", KUBEMEDIC_BOB_AGENT_ID="a",
+                    KUBEMEDIC_BOB_BIN="/usr/bin/bob"),
         _configured(WatsonxProvider, monkeypatch,
                     KUBEMEDIC_WATSONX_API_KEY="k",
                     KUBEMEDIC_WATSONX_PROJECT_ID="p"),
@@ -111,6 +112,7 @@ class TestRegistry:
         monkeypatch.setenv("KUBEMEDIC_IBM_ENABLED", "true")
         monkeypatch.setenv("KUBEMEDIC_BOB_API_KEY", "k")
         monkeypatch.setenv("KUBEMEDIC_BOB_AGENT_ID", "a")
+        monkeypatch.setenv("KUBEMEDIC_BOB_BIN", "/usr/bin/bob")
         assert get_provider().id == "ibm-bob"
 
     def test_explicit_ibm_bob_is_honoured(self, monkeypatch):
