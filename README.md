@@ -72,7 +72,7 @@ workload/       the demo app; HEALTHY=false is the incident lever
 static/         the operator console: plain HTML/CSS/JS, no build step
 dashboard/      the separate FastAPI incident console (port 8080)
 scripts/        inject, reset, the deterministic dry run, the live validation harness
-tests/          351 tests
+tests/          443 tests
 docs/           architecture, contracts, gaps, compliance
 submission/     contest deliverables and executed evidence
 ```
@@ -90,7 +90,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest
 ```
 
-Expected: `351 passed`. The suite needs no cluster and no credentials — the
+Expected: `443 passed`. The suite needs no cluster and no credentials — the
 Kubernetes API is mocked and every ticket test uses a temporary database.
 
 CI (`.github/workflows/ci.yml`) additionally byte-compiles every module,
@@ -104,7 +104,7 @@ because every provider returns the same validated analysis contract.
 
 | Provider | What it is | Credentials |
 |---|---|---|
-| `ibm-bob` | IBM Bob cloud REST API | `KUBEMEDIC_BOB_API_KEY` + `_AGENT_ID` |
+| `ibm-bob` | IBM Bob 2.0, driven headlessly through Bob Shell (`bob run`) | `KUBEMEDIC_BOB_API_KEY` (Inference scope) |
 | `watsonx` | IBM watsonx.ai | `KUBEMEDIC_WATSONX_API_KEY` + `_PROJECT_ID` |
 | `anthropic` | Claude (development / fallback) | `KUBEMEDIC_ANTHROPIC_API_KEY` |
 | `gemini` | Google Gemini | `KUBEMEDIC_GEMINI_API_KEY` (or `GEMINI_API_KEY`) |
@@ -112,15 +112,32 @@ because every provider returns the same validated analysis contract.
 | `host` | the agentic IDE hosting this workspace, via a file hand-off in `.kubemedic/` | none |
 
 The default is `auto`: the first configured engine answers. The two IBM
-engines are flagged out of that order until `KUBEMEDIC_IBM_ENABLED=true`,
-because neither can currently answer — watsonx auth works but the WML instance
-is inactive; the IBM Bob base URL is unresolved (see *Known limitations*).
-Selecting one by name always works.
+engines are flagged out of that order until `KUBEMEDIC_IBM_ENABLED=true`
+(watsonx auth works but its WML instance is inactive). Selecting one by name
+always works, and `KUBEMEDIC_REASONING_PROVIDER=ibm-bob` is how you run on Bob.
 
-On a runtime failure the primary falls back once to `AI_FALLBACK_PROVIDER`
-(default `gemini`) if `AI_FALLBACK_ENABLED` is set. A failure is never retried
-in place, and the reason the primary could not answer is carried into the audit
-record — the record shows that IBM was tried and why it did not answer.
+**How Bob is called.** `agent/providers/ibm_bob.py` runs `bob run` with a fixed
+argument list — never a shell — in a dedicated workspace
+(`agent/providers/bob_workspace/`) that contains only a tool-less
+`kubemedic-reasoner` mode. Every Bob tool group is disabled, the run is capped
+by `--max-cost` and `--max-turns`, and a timeout is *not* retried because Bob
+usage is metered. The API key reaches the child process through its environment
+only. Bob's own gateway refuses clients it does not recognise, so the provider
+drives the official CLI instead of calling the gateway directly.
+
+Why the dedicated workspace: run from the repository root, Bob loads the
+project's interactive rules ("call the MCP tools first") into a headless run
+where no tools exist — and with tools disabled it then **invented the tool
+calls and their responses, including tickets that were not in the evidence.**
+That was observed, not hypothesised. Two defences now exist: the tool-less mode,
+and `agent/reasoning.py`, which treats any analysis citing a ticket it was not
+given as unavailable.
+
+Cross-vendor fallback is **off by default** (`AI_FALLBACK_ENABLED=false`): a
+fallback sends the incident's evidence to a different vendor than the one you
+configured, so it is an operator's decision. A failure is never retried in
+place, and the reason the primary could not answer is carried into the audit
+record.
 
 `GET /api/provider` reports which engine is active, whether each is configured,
 and per-provider call and failure counters. `POST /api/provider/select`
@@ -227,7 +244,54 @@ keeps returning **200**, because the old pods are still serving. The health
 signal alone would miss the failure; the rollout signal catches it. That is the
 argument for verifying on two independent signals rather than trusting one.
 
+## Security model
+
+- **Authentication.** `KUBEMEDIC_REQUIRE_AUTH=true` requires a bearer token on
+  every route except liveness. Tokens (`KUBEMEDIC_API_TOKENS`,
+  `identity:role:token`) carry a role: `viewer` reads; `approver` opens
+  incidents, reviews, revises and executes; `admin` adds presenter tooling. With
+  auth required and no tokens configured the API refuses everything and will not
+  start.
+- **Accountability.** With auth on, the approver in the audit trail is the
+  token's identity; the `approver` in a request body is ignored. Execution and
+  incident creation are attributed the same way.
+- **Presenter tooling** (fault injection, the fixture cluster, the engine
+  switch) is on in development and **off when auth is required**, unless enabled
+  explicitly.
+- **The model's target is checked.** A plan must target the workload the
+  incident is about, or it is refused before a human sees it; the executor
+  checks again. Incidents can only be opened for `KUBEMEDIC_ALLOWED_NAMESPACES`.
+- **Rollback restores the whole pod template**, as `kubectl rollout undo` does,
+  not just the image. Scaling below one replica is refused: that is an outage
+  decision, not a remediation.
+- **Untrusted text is fenced.** Ticket titles, events and annotations are
+  bounded, stripped of control characters, and cannot close the prompt's fence.
+  This reduces prompt injection; it does not eliminate it. The real defences are
+  the closed allowlist, the target check, and a human who reads the evidence next
+  to the model's claim.
+- **Durable, tamper-evident audit.** Incidents and every audit event persist to
+  `KUBEMEDIC_STATE_DB`. Events are hash-chained; `GET /api/audit/verify` recomputes
+  the chain and reports the first row that does not verify. It is tamper-*evident*,
+  not tamper-proof: record `head` somewhere the database's writer cannot reach.
+- **Least privilege.** `deploy/kubemedic.yaml` grants get/list on pods, events,
+  replicasets and deployments, and `patch` on deployments and their scale
+  subresource in one namespace — no Secrets, no other verbs.
+
+## Deploying KubeMedic itself
+
+```bash
+docker build -t kubemedic:1.0 .
+kubectl -n opspilot create secret generic kubemedic-secrets \
+  --from-literal=KUBEMEDIC_API_TOKENS="alice:approver:$(python -c 'import secrets;print(secrets.token_urlsafe(32))')"
+kubectl apply -f deploy/kubemedic.yaml
+```
+
+One replica by design: the store is SQLite on a ReadWriteOnce volume and
+approvals must not race across replicas.
+
 ## The API
+
+Send `Authorization: Bearer <token>` when auth is required.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -235,16 +299,18 @@ argument for verifying on two independent signals rather than trusting one.
 | `GET` | `/api/cluster` | Live cluster state, or why it cannot be read |
 | `GET` | `/api/tickets` | Real tickets from the store |
 | `POST` | `/api/incidents` | Collect evidence, correlate, ask the engine, propose |
-| `GET` | `/api/incidents` | List incidents known to this process |
+| `GET` | `/api/incidents` | List incidents, including those stored before a restart |
 | `GET` | `/api/incidents/{id}` | Evidence, hypotheses, root cause, plan, audit log |
 | `POST` | `/api/incidents/{id}/review` | Approve, or reject **with a reason** |
 | `POST` | `/api/incidents/{id}/revise` | Ask for a plan answering the objection (max 3) |
 | `POST` | `/api/incidents/{id}/execute` | Execute the approved action, then verify |
 | `GET` | `/api/incidents/{id}/record` | The audit artifact |
+| `GET` | `/api/incidents/{id}/events` | The incident's hash-chained audit events |
+| `GET` | `/api/audit/verify` | Recompute the audit chain; report the head hash |
 | `GET` | `/health/ai` | Which engine will answer, and why |
 | `GET`/`POST` | `/api/provider`, `/api/provider/select` | Engine status and counters; switch at runtime |
-| `GET` | `/api/limits` | Bounds a reviewer should know: revisions, allowlist, in-memory state |
-| `POST` | `/api/demo/start`, `/api/demo/stop` | The fixture-cluster demo |
+| `GET` | `/api/limits` | Bounds a reviewer should know: revisions, allowlist, auth mode, namespaces |
+| `POST` | `/api/demo/start`, `/api/demo/stop` | The fixture-cluster demo (presenter tooling) |
 | `POST` | `/api/live/inject`, `/api/live/watch`, `/api/live/reset` | Live-cluster orchestration (presenter tooling) |
 
 Rejecting without a reason returns `400 feedback_required`. That is not
@@ -269,25 +335,31 @@ trusting it.
 Stated plainly, because a proof of concept that hides its edges is harder to
 evaluate:
 
-- **No IBM engine has yet returned a live analysis.** watsonx IAM auth works
-  but the WML instance behind it is inactive; the IBM Bob REST base URL is
-  unresolved — 401 on `cloud.manufact.com`, 404 on `bob.ibm.com`. The reasoning
-  path is implemented, contract-tested and its failure policy verified; `auto`
-  falls through to whichever engine is configured. The first live model
-  analysis came from Gemini and is recorded in `submission/evidence/`. The
-  closest IBM fix needs no credentials: run the incident inside the IBM Bob IDE
-  with the `host` provider, per `SHIVRAJ_DOCS/02_BOB_RUNBOOK.md`.
-- **Incidents live in memory.** The API loses them on restart. Audit records
-  in `records/` are the durable artifact.
+- **A live IBM Bob run is recorded.** `submission/evidence/validate-run.txt`
+  and `INC-20260926T205136-001.json` are `scripts/validate_incident.py` against
+  a real cluster with Bob as the engine: 34 assertions, 0 failures,
+  `analysis_source: "ibm-bob"`. Bob's first proposal was already correct in that
+  run, so it does not show a rejection changing the recommended action — an
+  earlier fixture-cluster record does. Running Bob needs `KUBEMEDIC_BOB_API_KEY`
+  in the environment. watsonx auth works but its WML instance is inactive.
+- **Bob is metered.** Each analysis is capped by `KUBEMEDIC_BOB_MAX_COST`; a
+  revision is a second call.
+- **Bob Shell must be installed** where the agent runs. The container image does
+  not bundle it.
+- **Prompt injection is mitigated, not solved** (see *Security model*).
 - **The dry run's cluster is a fixture.** Only the thing observed and mutated is
   simulated; the live proof is `scripts/validate.sh`.
-- **The legacy dashboard falls back to mock data** when the agent is not
-  running, for offline UI development. The operator console at `/ui` is served
-  by the agent itself and renders only what the API returned.
 - **Correlation is deterministic Python**, and the model is *also* asked to
   correlate. The two results are not yet reconciled — see `docs/21_DECISIONS.md`
-  ADR-007.
-- **Single workload scope.** One deployment, one service.
+  ADR-007. The tickets it correlates are filed by the same watcher about the
+  same deployment, so many-to-one is demonstrated on staged input; real
+  sources (PagerDuty, Jira, Alertmanager) are the next step.
+- **The legacy `dashboard/`** still exists and no longer serves mock data unless
+  `KUBEMEDIC_DASHBOARD_MOCK=true`. The operator console at `/ui` is the supported
+  UI and renders only what the API returned.
+- **Single workload, single replica.** One deployment, one service, one writer.
+- **Execution blocks a request thread** while it waits for the rollout to settle
+  (up to `KUBEMEDIC_SETTLE_TIMEOUT_SECONDS`).
 
 ## Documentation
 

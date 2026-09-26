@@ -1,0 +1,217 @@
+{
+  "incident_id": "INC-20260926T205136-001",
+  "final_state": "RESOLVED",
+  "tickets": [
+    "TKT-20260926-205136-5046",
+    "TKT-20260926-205136-4997"
+  ],
+  "correlation": {
+    "master_incident_id": "INC-20260926T205136-001",
+    "member_tickets": [
+      "TKT-20260926-205136-5046",
+      "TKT-20260926-205136-4997"
+    ],
+    "excluded_tickets": [],
+    "correlation_basis": [
+      "TKT-20260926-205136-5046 references ticket-booking",
+      "TKT-20260926-205136-5046 created within incident window (2026-09-26T20:51:36.504592+00:00)",
+      "TKT-20260926-205136-5046 describes known failure symptoms",
+      "TKT-20260926-205136-4997 references ticket-booking",
+      "TKT-20260926-205136-4997 created within incident window (2026-09-26T20:51:36.499719+00:00)",
+      "TKT-20260926-205136-4997 describes known failure symptoms"
+    ],
+    "rationale": "2 ticket(s) correlated to deployment ticket-booking."
+  },
+  "analysis_source": "ibm-bob",
+  "bob_analysis": {
+    "schema_version": "1.0",
+    "analysis_source": "ibm-bob",
+    "status": null,
+    "correlation": null,
+    "timeline": [],
+    "hypotheses": [
+      {
+        "rank": 1,
+        "statement": "A rollout to ticketbooking:1.1 (revision 2) was initiated and is stalling: the single new pod is stuck in ContainerCreating while the two revision-1 pods running ticketbooking:1.0 remain healthy. The change_cause field explicitly labels revision 2 as a regression.",
+        "confidence": "high",
+        "confidence_reason": "All signals converge: revision 2 has 0 ready replicas, the new pod is Pending/ContainerCreating, the deployment reports rollout_complete=false and healthy=false, and the health endpoint responds 200 serving version 1.0 — meaning traffic is still being served by the old pods.",
+        "supporting_evidence": [
+          "rollout_history revision 2: image=ticketbooking:1.1, ready_replicas=0, is_current=true, change_cause='Deploy ticketbooking:1.1 (regression)'",
+          "pod ticket-booking-596f87b86b-6zt8x: phase=Pending, ready=false, reason=ContainerCreating, image=ticketbooking:1.1",
+          "workload: desired_replicas=3, ready_replicas=2, updated_replicas=1, unavailable_replicas=1, rollout_complete=false, healthy=false",
+          "application_health: healthy=true, status_code=200, version='1.0' — traffic is served only by revision-1 pods",
+          "TKT-20260926-205136-4997: 'Rollout stalled: 2/3 replicas ready'; TKT-20260926-205136-5046: 'Pod not ready: ticket-booking-596f87b86b-6zt8x'"
+        ],
+        "contradicting_evidence": [
+          "The pod is still in ContainerCreating (not CrashLoopBackOff or ImagePullBackOff), so it is theoretically possible the image pull is just slow rather than permanently broken — however the change_cause label 'regression' strongly indicates intentional acknowledgement of a bad release"
+        ],
+        "cheapest_next_check": ""
+      }
+    ],
+    "root_cause": {
+      "statement": "Revision 2 (ticketbooking:1.1) was deliberately labelled a regression at deploy time and is failing to produce ready pods, causing a stalled rolling update. Revision 1 (ticketbooking:1.0) is confirmed healthy with 2 ready replicas and a passing health check.",
+      "confidence": "high",
+      "is_inference": true
+    },
+    "dual_signal_note": "The deployment's current image is ticketbooking:1.1 (revision 2, is_current=true) yet the health endpoint reports version='1.0' and healthy=true. These are not contradictory: the two surviving revision-1 pods are still serving traffic because the rolling update has not yet replaced them. The healthy signal reflects the old pods, not the new revision.",
+    "recommended_action": "rollback_deployment",
+    "action_target": "ticket-booking",
+    "action_parameters": {
+      "to_revision": 1
+    },
+    "reason": "Human feedback required confirming a healthy revision exists before acting. Revision 1 is confirmed healthy: rollout_history shows ready_replicas=2, change_cause='Restore ticketbooking:1.0 (healthy)', and the live health endpoint independently confirms version 1.0 is serving HTTP 200. Rolling back to revision 1 terminates the stalled revision-2 pod and restores the deployment to its fully healthy prior state.",
+    "risk_explanation": "Revision 1 is already serving live traffic successfully (health check: 200, version=1.0). Rolling back re-pins the deployment to that known-good image. The only risk is a brief re-scheduling period if Kubernetes terminates and recreates pods, but two healthy pods are already up, satisfying MinimumReplicasAvailable throughout.",
+    "requires_human_approval": true,
+    "notes_for_reviewer": null,
+    "blast_radius": "Affects only the ticket-booking deployment in namespace opspilot. The Pending revision-2 pod (ticket-booking-596f87b86b-6zt8x) will be terminated; the two revision-1 pods are expected to remain running or be replaced by identical revision-1 pods to meet desired_replicas=3. No other workloads or namespaces are referenced in the evidence.",
+    "risk": "low",
+    "reversible": true,
+    "expected_effect": "The Pending ticketbooking:1.1 pod is removed; the deployment scales back to 3 ready replicas all running ticketbooking:1.0; workload conditions show Available=True and rollout_complete=true; the health endpoint continues to return HTTP 200 version=1.0.",
+    "verification_plan": [
+      "Confirm all 3 pods show phase=Running, ready=true, image=docker.io/library/ticketbooking:1.0 (matching revision-1 pods)",
+      "Confirm no pod with image ticketbooking:1.1 exists in namespace opspilot",
+      "Confirm deployment conditions: Available=True (MinimumReplicasAvailable) and Progressing reason=NewReplicaSetAvailable",
+      "Confirm workload fields: ready_replicas=3, updated_replicas=3, unavailable_replicas=0, rollout_complete=true",
+      "Re-query the health endpoint; expect HTTP 200, healthy=true, version='1.0'",
+      "Confirm rollout_history current revision points to revision 1 (ticketbooking:1.0)"
+    ],
+    "missing_signals": [],
+    "partial_evidence": []
+  },
+  "root_cause": {
+    "statement": "Revision 2 (ticketbooking:1.1) was deliberately labelled a regression at deploy time and is failing to produce ready pods, causing a stalled rolling update. Revision 1 (ticketbooking:1.0) is confirmed healthy with 2 ready replicas and a passing health check.",
+    "confidence": "high",
+    "is_inference": true
+  },
+  "recommended_action": "rollback_deployment",
+  "human_decision": "approved",
+  "rejection_feedback": null,
+  "feedback_history": [
+    "Confirm the rollout history names a healthy revision before acting."
+  ],
+  "revision_count": 1,
+  "executed": true,
+  "verification_outcome": "PASS",
+  "created_at": "2026-09-26T20:51:36.606149Z",
+  "resolved_at": "2026-09-26T20:52:33.222010Z",
+  "audit_log": [
+    {
+      "step": "correlation",
+      "member_tickets": [
+        "TKT-20260926-205136-5046",
+        "TKT-20260926-205136-4997"
+      ],
+      "excluded_tickets": [],
+      "basis": [
+        "TKT-20260926-205136-5046 references ticket-booking",
+        "TKT-20260926-205136-5046 created within incident window (2026-09-26T20:51:36.504592+00:00)",
+        "TKT-20260926-205136-5046 describes known failure symptoms",
+        "TKT-20260926-205136-4997 references ticket-booking",
+        "TKT-20260926-205136-4997 created within incident window (2026-09-26T20:51:36.499719+00:00)",
+        "TKT-20260926-205136-4997 describes known failure symptoms"
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "ibm-bob",
+      "invoked_at": "2026-09-26T20:52:05.043490+00:00",
+      "invocation": [
+        "bob-shell",
+        "run",
+        "mode=kubemedic-reasoner",
+        "max-cost=1.0",
+        "max-turns=3"
+      ],
+      "duration_ms": 28413,
+      "ok": true,
+      "error": null,
+      "analysis_source": "ibm-bob"
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "rejected",
+      "approver": "validator",
+      "timestamp": "2026-09-26T20:52:05.082587+00:00",
+      "feedback": "Confirm the rollout history names a healthy revision before acting."
+    },
+    {
+      "step": "rejection_recorded",
+      "reason": "Confirm the rollout history names a healthy revision before acting.",
+      "executed": false,
+      "feedback_count": 1
+    },
+    {
+      "step": "revision_requested",
+      "revision": 1,
+      "feedback_so_far": [
+        "Confirm the rollout history names a healthy revision before acting."
+      ]
+    },
+    {
+      "stage": "REASONING",
+      "provider": "ibm-bob",
+      "invoked_at": "2026-09-26T20:52:28.075784+00:00",
+      "invocation": [
+        "bob-shell",
+        "run",
+        "mode=kubemedic-reasoner",
+        "max-cost=1.0",
+        "max-turns=3"
+      ],
+      "duration_ms": 22960,
+      "ok": true,
+      "error": null,
+      "analysis_source": "ibm-bob"
+    },
+    {
+      "step": "plan",
+      "action": "rollback_deployment",
+      "target": "ticket-booking"
+    },
+    {
+      "step": "human_decision",
+      "decision": "approved",
+      "approver": "validator",
+      "timestamp": "2026-09-26T20:52:28.075960+00:00",
+      "feedback": null
+    },
+    {
+      "step": "execute",
+      "action": "rollback_deployment",
+      "target": "ticket-booking",
+      "parameters": {
+        "to_revision": 1
+      },
+      "started_at": "2026-09-26T20:52:28.075983+00:00"
+    },
+    {
+      "step": "execute_result",
+      "success": true,
+      "message": "rollback_deployment on ticket-booking succeeded",
+      "completed_at": "2026-09-26T20:52:28.117149+00:00"
+    },
+    {
+      "step": "verification",
+      "outcome": "PASS",
+      "signals": [
+        {
+          "name": "rollout_healthy",
+          "passed": true,
+          "detail": "ready=True, updated=2, desired=2"
+        },
+        {
+          "name": "health_endpoint",
+          "passed": true,
+          "detail": "status_code=200, healthy=True"
+        }
+      ],
+      "detail": "Both signals green: rollout healthy and application health OK.",
+      "checked_at": "2026-09-26T20:52:33.221960+00:00"
+    }
+  ]
+}

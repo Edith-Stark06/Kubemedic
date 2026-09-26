@@ -1,102 +1,66 @@
-# Submission — IBM TechXchange 2026 Pre-conference Dev Day Hackathon
+# Submission — IBM Bob 2.0 Hackathon
 
 **Project:** KubeMedic — evidence-driven Kubernetes incident response with a
 human in the loop
-**Theme:** Build with purpose using IBM Bob 2.0
-**Team:** Ramana, Verona, Shivraj (3 of a maximum 5)
 
----
+## Deliverables
 
-## The four required deliverables
-
-| # | Deliverable | Where | Status |
-|---|---|---|---|
-| 1 | Video demonstration, including how IBM Bob was used | *link to be added* | **TODO** |
-| 2 | Written problem and solution statements | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | **DONE** |
-| 3 | Written statement on how IBM Bob was utilised | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | **DONE** |
-| 4a | Working code repository — see [`CODE_REPOSITORY.md`](CODE_REPOSITORY.md) | [github.com/Edith-Stark06/Kubemedic](https://github.com/Edith-Stark06/Kubemedic) | **DONE** |
-| 4b | Exported IBM Bob report of all relevant tasks/sessions | [`bob-report/`](bob-report/) | **DONE** — best-effort (Bob v1.126.0 has no export function; see bob-report/README.md) |
-
----
+| Deliverable | Where | Status |
+|---|---|---|
+| Public code repository | this repository | **Make public before submitting** |
+| Problem and solution statement (≤ 500 words) | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | Written |
+| IBM Bob usage statement (≤ 500 words) | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | Written |
+| IBM Bob task-session summary screenshots, each member | [`bob-report/`](bob-report/) | **Not yet captured** |
+| Video demonstration (≤ 3 min, ≥ 90 s of the solution running) | — | **Not yet recorded** |
+| Demo application platform and URL | — | **Not yet hosted** |
+| Cover image, slide deck, tags | — | **Not yet made** |
 
 ## Evidence
 
-Everything in [`evidence/`](evidence/) was produced by running the submitted
-code. Nothing is hand-written.
+Everything in [`evidence/`](evidence/) was produced by running the code.
 
 | File | What it shows |
 |---|---|
-| [`evidence/pytest-run.txt`](evidence/pytest-run.txt) | **282 passed** — the full suite at time of the validate run |
-| [`evidence/validate-run.txt`](evidence/validate-run.txt) | **29 assertions, 0 failures** against a live k3s cluster |
-| `evidence/INC-*.json` | A real audit record from that run |
+| `pytest-run.txt` | The suite at the time of an earlier run. Re-run `python -m pytest` for the current count |
+| `validate-run.txt` | **34 assertions, 0 failures, against a live kind cluster, reasoned by IBM Bob** |
+| `INC-20260926T205136-001.json` | The audit record from that run. `analysis_source: "ibm-bob"` |
+| `INC-20260926T192815-001.json` | An earlier record, same engine, against the fixture cluster |
+| other `INC-*.json` | Earlier records; `analysis_source` reads `unavailable` or `fixture` |
 
-### What the end-to-end run proves
+### What the live record shows, and does not
 
-`bash scripts/validate.sh` drives the whole loop against a real cluster and
-exits non-zero on any failed assertion:
+`INC-20260926T205136-001.json` is `scripts/validate_incident.py` end to end
+against a real cluster (kind), fallback disabled: the watcher observes the
+injected failure and files real tickets, IBM Bob reasons over the live evidence
+and proposes `rollback_deployment`, a human rejects it without a reason (refused),
+rejects it with one (recorded, cluster unchanged), Bob is asked again and
+proposes the same action, a human approves, the executor performs a real
+rollback restoring the full pod template, and both recovery signals pass on a
+re-read of the cluster.
 
-```
-healthy 2/2 -> inject bad image -> rollout stalls 2/3
-  -> watcher files 2 tickets from 2 distinct signals
-  -> re-poll files 0 (deduplicated)
-  -> both correlate into ONE incident, 0 excluded
-  -> execute without approval        REFUSED, cluster asserted unchanged
-  -> reject without a reason         REFUSED
-  -> reject with a reason            recorded, cluster still unchanged
-  -> approve
-  -> rollback executed through the Kubernetes API
-  -> verified on TWO independent signals
-  -> RESOLVED, audit record written
-  -> reset
-```
-
-The audit record in `evidence/` carries the two correlated ticket ids, the
-rejection reason in `feedback_history`, `executed: true` and
-`verification_outcome: PASS`.
-
----
-
-## What we are not claiming
-
-`analysis_source` in that record reads **`unavailable`**, not `ibm-bob`.
-
-IBM Bob's runtime reasoning path is implemented, contract-tested and its
-failure policy verified — but we did not complete a live model call before the
-deadline. In our cluster runs the system reported `BOB_UNAVAILABLE`, produced
-no diagnosis, and refused to build a plan; the harness substituted an
-operator-specified rollback and **labelled it as operator-specified** in both
-its output and the audit record, so the approval gate, executor and verifier
-could still be exercised end to end.
-
-We would rather say that plainly than imply otherwise. A system that invents a
-diagnosis when its reasoner is unreachable is more dangerous than one that says
-nothing — and ours refusing to is tested, not asserted.
-
-See [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) for the full account.
+**What it does not show:** in this run Bob's first proposal was already the
+correct one, so the human's objection did not change the recommended action —
+only that the loop executes and Bob answers again. It is not evidence that a
+rejection can steer Bob toward a different action; the earlier fixture-cluster
+record (`INC-20260926T192815-001.json`) shows that instead, with a scripted
+objection that names a specific alternative.
 
 ## Prior work disclosure
 
-Early exploratory work on the Kubernetes evidence layer predates the contest
-window (files dated 2026-08-25; the contest opened 2026-08-28 10:00 ET). The
-submitted architecture — the agent, the MCP contract, the human review loop,
-the API, the dashboard and the test suite — was built during the contest, and
-the git history shows it. We are flagging this rather than leaving it to be
-found.
-
----
+KubeMedic was started on 2026-08-28 for an earlier hackathon and its git history
+shows that. This event's window added: target validation, authentication and
+roles, durable state with a hash-chained audit trail, full-template rollback,
+prompt fencing, deployment manifests with least-privilege RBAC, and the Bob 2.0
+headless integration. We are flagging this rather than leaving it to be found.
+Confirm with the organizers that resubmission is permitted.
 
 ## Reproducing
 
 ```bash
-git clone https://github.com/Edith-Stark06/Kubemedic.git
-cd Kubemedic
+git clone <this repository> && cd Kubemedic
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest                # 282 passed, no cluster or credentials needed
+python -m pytest        # no cluster or credentials needed
+python scripts/dry_run.py --non-interactive
 ```
 
-With a Kubernetes cluster, `README.md` has the demo steps and
-`bash scripts/validate.sh` reproduces `evidence/validate-run.txt`.
-
-Verified from a clean clone on 2026-08-30: 140 tracked files, no build
-artifacts, 238 tests pass, and `mcp_server.server`, `agent.api` and
-`dashboard.app` all import.
+A live cluster run is `bash scripts/validate.sh`.
