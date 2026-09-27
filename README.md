@@ -100,7 +100,7 @@ workload/       the demo app; HEALTHY=false is the incident lever
 static/         the operator console: plain HTML/CSS/JS, no build step
 dashboard/      the separate FastAPI incident console (port 8080)
 scripts/        inject, reset, the deterministic dry run, the live validation harness
-tests/          465 tests
+tests/          470 tests
 docs/           architecture, contracts, gaps, compliance
 submission/     contest deliverables and executed evidence
 ```
@@ -118,7 +118,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest
 ```
 
-Expected: `465 passed`. The suite needs no cluster and no credentials — the
+Expected: `470 passed`. The suite needs no cluster and no credentials — the
 Kubernetes API is mocked and every ticket test uses a temporary database.
 
 CI (`.github/workflows/ci.yml`) additionally byte-compiles every module,
