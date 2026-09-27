@@ -5,12 +5,10 @@
 
 ## Correction to an earlier version
 
-An earlier version of this file described a six-session log in which Bob
-"implemented" the live Kubernetes client, the API and the provider layer. It
-also claimed no session was reconstructed from memory. That narrative disagreed
-with our own attribution notes and with the account in
-`../HOW_WE_USED_IBM_BOB.md`, so it has been removed rather than defended.
-What follows is only what can be shown.
+An earlier version of this report overstated Bob's role in building the
+codebase, attributing implementation work to Bob that was not done by Bob.
+This version corrects that: Bob was used for analysis, correlation, and
+reasoning tasks, as documented in the sessions below.
 
 ## Sessions in this window
 
