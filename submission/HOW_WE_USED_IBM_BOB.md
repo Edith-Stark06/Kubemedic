@@ -10,9 +10,9 @@ is pure reasoning over evidence our own read-only layer collected,
 `--max-cost`/`--max-turns` on every call with no retry on timeout (Bob usage is
 metered), and the API key passed to the child process's environment only.
 
-Whatever Bob returns is validated before anything else sees it: a closed
-action allowlist, a required target, a check that the target is the incident's
-own workload. Any failure produces "analysis unavailable" and no plan.
+Whatever Bob returns is validated: a closed action allowlist, a required
+target matching the incident's own workload. Any failure produces "analysis
+unavailable" and no plan.
 
 ## Document understanding: a real operational runbook
 
@@ -32,24 +32,27 @@ citing a real document by name and by its stated rule, not evidence alone —
 
 ## What running Bob headlessly taught us
 
-Run from the repository root with tools disabled, Bob still tried to call the
-MCP tools our interactive `.bob/` rules mention, then **invented the tool
-responses, including tickets that were not in the evidence** — exactly the
-failure this project exists to prevent. Fixed in two layers: a dedicated
-workspace whose mode states the evidence is in the prompt and nothing else
-exists, and `agent/reasoning.py` now treats an analysis citing an unknown
-ticket as unavailable, with tests. Also found: Windows' `.cmd` shim truncates
-multi-line prompts; we now launch Bob's Node entrypoint directly.
+With tools disabled, Bob still tried to call the MCP tools our interactive
+`.bob/` rules mention, then **invented the tool responses, including tickets
+not in the evidence** — exactly the failure this project exists to prevent.
+Fixed in two layers: a dedicated workspace stating the evidence is in the
+prompt and nothing else exists, and `agent/reasoning.py` now treats an
+analysis citing an unknown ticket as unavailable, with tests. Also found:
+Windows' `.cmd` shim truncates multi-line prompts; fixed by launching Bob's
+Node entrypoint directly.
 
-## Bob as the development environment, and who wrote what
+## Development environment, audit, and who wrote what
 
-The `.bob/` pack is committed: four custom modes, seven skills, six
-investigator personas, standing rules, and a read-only evidence MCP server,
-asserted by CI. Bob did not write the code changes made in this window — a
-headless attempt stalled on an edit approval. The hardening was written with
-Claude Code (Sonnet 5) and covered by tests; Bob's role here is the runtime
-reasoner, and the tool whose real behaviour, including the fabrication above,
-drove those fixes.
+The `.bob/` pack is committed: four modes, seven skills, six investigator
+personas, standing rules, a read-only evidence MCP server, asserted by CI. The
+hardening in this window was written with Claude Code (Sonnet 5); Bob's real
+behaviour, including the fabrication above, drove the fixes. An earlier
+headless attempt to have Bob implement one stalled on an edit approval.
+
+We then ran Bob adversarially against our own submission. It found a real
+bug — a stale test count — now fixed. Given `--trust` and one narrow
+instruction, Bob edited a file directly: the first change here Bob actually
+made, not Claude. Small, but real.
 
 ## What is shown
 

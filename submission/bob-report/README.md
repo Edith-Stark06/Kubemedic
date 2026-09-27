@@ -27,10 +27,15 @@ Inference-scoped API key.
 | 7 | Dry run with Bob as the engine: initial analysis and a revision after scripted feedback, fallback disabled | Succeeded. Two calls, about 0.010 cost each (Bob Shell logs). Fixture cluster. Recorded in `../evidence/INC-20260926T192815-001.json` |
 | 8 | `scripts/validate_incident.py` against a live kind cluster, Bob as the engine | 34 assertions, 0 failures. `analysis_source: "ibm-bob"`. Recorded in `../evidence/INC-20260926T205136-001.json` and `../evidence/validate-run.txt` |
 | 9 | Same as 8, plus `docs/RUNBOOK_TICKET_BOOKING.md` handed to Bob as reference material alongside the evidence (`agent/runbook.py`, the "document understanding" feature) | 34 assertions, 0 failures. Bob's `reason` field names the playbook's failure class by number and states its specific rule (rollback, not restart) rather than deriving it from evidence alone. Recorded in `../evidence/INC-20260926T213503-001.json` and `../evidence/validate-run-runbook.txt` |
+| 10 | Adversarial audit of this submission's own documents (`kubemedic-auditor` mode, read-only) | Read `AGENTS.md`, `README.md` and every `submission/*.md`. Found a real, undisclosed bug: `evidence/pytest-run.txt` still read "351 passed" after the docs had been updated to claim 465. Fixed in the next commit. Cost 0.425, 18 tool calls |
+| 11 | Direct edit, `kubemedic-dev` mode, `--trust`: rewrite this file's own "Correction to an earlier version" section, nothing else | **Succeeded.** Bob edited the file directly -- the first change in this repository actually made by Bob rather than described by it. Diff was exactly the requested section. Task `f61b18304336e3255ee006ede3750199`, cost 0.084, 2 tool calls |
 
 Sessions 4–6 are why the provider uses a dedicated workspace and a tool-less
 mode, and why `agent/reasoning.py` rejects an analysis that cites tickets it was
-not given. Each has a test. Sessions 7–9 ran with `KUBEMEDIC_BOB_MAX_COST=1.0`.
+not given. Each has a test. Sessions 7–11 ran with `KUBEMEDIC_BOB_MAX_COST`
+between 1.0 and 2.0. Session 11's `--trust` flag is what session 3 was missing
+-- session 3 was run without it and stalled on an edit approval that never
+resolved headlessly.
 
 ## Not yet done
 
