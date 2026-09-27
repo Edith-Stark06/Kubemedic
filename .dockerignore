@@ -18,3 +18,5 @@ dashboard
 workload
 k8s
 deploy
+assets
+*.md

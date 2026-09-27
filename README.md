@@ -1,6 +1,17 @@
-# KubeMedic
+<p align="center">
+  <img src="assets/logo.png" alt="KubeMedic" width="560">
+</p>
 
-**Evidence-driven incident response for Kubernetes, with a human in the loop.**
+<h1 align="center">KubeMedic</h1>
+<p align="center"><b>Evidence-driven Kubernetes incident response, with a human in the loop.</b></p>
+
+<p align="center">
+  <a href="https://github.com/Edith-Stark06/Kubemedic/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Edith-Stark06/Kubemedic/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Tests" src="https://img.shields.io/badge/tests-465%20passing-2ea44f">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-3776ab">
+  <img alt="Reasoning" src="https://img.shields.io/badge/reasoning-IBM%20Bob%202.0-0f62fe">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-informational"></a>
+</p>
 
 KubeMedic watches a Kubernetes workload. When a deployment goes bad it collects
 evidence through an MCP server, uses IBM Bob to correlate several symptoms into
@@ -28,6 +39,23 @@ tickets ─┘                                                      │
                                                      │
                                               audit record
 ```
+
+## Contents
+
+- [The four rules](#the-four-rules)
+- [Layout](#layout)
+- [Setup](#setup)
+- [Choosing the reasoning engine](#choosing-the-reasoning-engine)
+- [Document understanding: an operational runbook](#document-understanding-an-operational-runbook)
+- [Configuration](#configuration)
+- [Running it](#running-it)
+- [Security model](#security-model)
+- [Deploying KubeMedic itself](#deploying-kubemedic-itself)
+- [The API](#the-api)
+- [The MCP evidence surface](#the-mcp-evidence-surface)
+- [Known limitations](#known-limitations)
+- [Documentation](#documentation)
+- [License](#license)
 
 ## The four rules
 
@@ -393,3 +421,7 @@ approval gate, `docs/20_KNOWN_GAPS.md` an honest gap analysis, and
 ## License
 
 MIT — see `LICENSE`.
+
+---
+
+<p align="center"><sub><a href="#contents">Back to top ↑</a></sub></p>
