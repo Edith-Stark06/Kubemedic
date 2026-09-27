@@ -29,13 +29,16 @@ Inference-scoped API key.
 | 9 | Same as 8, plus `docs/RUNBOOK_TICKET_BOOKING.md` handed to Bob as reference material alongside the evidence (`agent/runbook.py`, the "document understanding" feature) | 34 assertions, 0 failures. Bob's `reason` field names the playbook's failure class by number and states its specific rule (rollback, not restart) rather than deriving it from evidence alone. Recorded in `../evidence/INC-20260926T213503-001.json` and `../evidence/validate-run-runbook.txt` |
 | 10 | Adversarial audit of this submission's own documents (`kubemedic-auditor` mode, read-only) | Read `AGENTS.md`, `README.md` and every `submission/*.md`. Found a real, undisclosed bug: `evidence/pytest-run.txt` still read "351 passed" after the docs had been updated to claim 465. Fixed in the next commit. Cost 0.425, 18 tool calls |
 | 11 | Direct edit, `kubemedic-dev` mode, `--trust`: rewrite this file's own "Correction to an earlier version" section, nothing else | **Succeeded.** Bob edited the file directly -- the first change in this repository actually made by Bob rather than described by it. Diff was exactly the requested section. Task `f61b18304336e3255ee006ede3750199`, cost 0.084, 2 tool calls |
+| 12 | Security review of `agent/auth.py`, `agent/executor.py`, `agent/k8s_client.py`, `agent/store.py` (`kubemedic-auditor` mode, read-only) | Six findings with file/line citations. Three real and fixed: an executor guard relying on an incidental type constraint rather than an explicit check, a redundant Kubernetes client construction, an advisory-only insecure-bind warning upgraded to a hard refusal. **One finding verified and rejected**: it proposed scoping the audit hash chain per incident, which we proved (with a test) would let an attacker forge one incident's history in isolation -- the opposite of what was asked for. Task `cb69f18b9ec0dc7dcae6b74d62be54d9`, cost 0.271, 9 tool calls |
 
 Sessions 4–6 are why the provider uses a dedicated workspace and a tool-less
 mode, and why `agent/reasoning.py` rejects an analysis that cites tickets it was
-not given. Each has a test. Sessions 7–11 ran with `KUBEMEDIC_BOB_MAX_COST`
-between 1.0 and 2.0. Session 11's `--trust` flag is what session 3 was missing
+not given. Each has a test. Sessions 7–12 ran with `KUBEMEDIC_BOB_MAX_COST`
+between 1.0 and 3.0. Session 11's `--trust` flag is what session 3 was missing
 -- session 3 was run without it and stalled on an edit approval that never
-resolved headlessly.
+resolved headlessly. Session 12's rejected finding is why `agent/store.py`'s
+docstring and `tests/test_auth_and_store.py::TestAuditChain` now spell out,
+with a passing test, why the chain is deliberately shared across incidents.
 
 ## Not yet done
 
