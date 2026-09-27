@@ -38,3 +38,27 @@ def _isolated_state(monkeypatch, tmp_path):
     store.reset_store()
     yield
     store.reset_store()
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_ai_credentials(monkeypatch):
+    """
+    Strip every AI-provider credential a developer's own shell might have set,
+    before each test -- not just KUBEMEDIC_BOB_API_KEY.
+
+    IBMBobProvider reads BOB_API_KEY as a fallback (Bob Shell's own env var
+    convention), so a machine with it exported for real `bob` CLI use makes
+    every "no credentials configured" test silently pick up a real key,
+    reach the real Bob Shell, and get back a real answer -- failing (or
+    worse, passing for the wrong reason) only on that machine, never in CI.
+    A test that wants a credential present sets it itself via monkeypatch,
+    which layers correctly over this since it runs after fixture setup.
+    """
+    for name in (
+        "KUBEMEDIC_BOB_API_KEY", "BOB_API_KEY", "BOBSHELL_API_KEY",
+        "KUBEMEDIC_BOB_BIN", "KUBEMEDIC_BOB_AGENT_ID",
+        "KUBEMEDIC_WATSONX_API_KEY", "KUBEMEDIC_WATSONX_PROJECT_ID",
+        "KUBEMEDIC_ANTHROPIC_API_KEY", "KUBEMEDIC_GEMINI_API_KEY",
+        "GEMINI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
