@@ -925,6 +925,21 @@ def _port_holder(host: str, port: int) -> int | None:
     return -1                                # busy, holder unknown
 
 
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def insecure_bind(host: str, auth_is_required: bool) -> bool:
+    """
+    True when this host/auth combination would let anyone on the network
+    reach an API that can approve and execute with no credential at all.
+
+    A pure function so the policy is unit-tested without starting a server --
+    an earlier version of this check only printed a warning and let the
+    process start anyway, found by a security-focused Bob audit session.
+    """
+    return not auth_is_required and host not in _LOOPBACK_HOSTS
+
+
 def main() -> None:  # pragma: no cover
     import uvicorn
 
@@ -937,12 +952,14 @@ def main() -> None:  # pragma: no cover
             "valid token. Refusing to start.", file=sys.stderr,
         )
         raise SystemExit(1)
-    if not auth.auth_required() and host not in ("127.0.0.1", "localhost", "::1"):
+    if insecure_bind(host, auth.auth_required()):
         print(
-            f"WARNING: binding {host} with authentication OFF. Anyone who can "
-            "reach this port can approve and execute. Set KUBEMEDIC_REQUIRE_AUTH=true.",
+            f"Refusing to bind {host} with authentication OFF. Anyone who can "
+            "reach this port would be able to approve and execute. Set "
+            "KUBEMEDIC_REQUIRE_AUTH=true, or bind 127.0.0.1 for local use.",
             file=sys.stderr,
         )
+        raise SystemExit(1)
 
     holder = _port_holder(host, port)
     if holder is not None:

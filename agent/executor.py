@@ -80,7 +80,18 @@ def execute(
             f"Incident {incident.incident_id} has no remediation plan"
         )
 
-    workload = incident.evidence.deployment_name if incident.evidence else None
+    if incident.evidence is None:
+        # A missing evidence snapshot is currently caught downstream because
+        # plan.target (a required str) can never equal the None this would
+        # otherwise compare against -- but that is incidental, not a
+        # guarantee the model gives, so it is checked directly rather than
+        # relied on.
+        raise ValueError(
+            f"Incident {incident.incident_id} has no evidence snapshot; "
+            "refusing to execute against an unknown namespace"
+        )
+
+    workload = incident.evidence.deployment_name
     if plan.target != workload:
         raise ValueError(
             f"Refusing to execute: plan target {plan.target!r} is not the "
@@ -99,7 +110,7 @@ def execute(
     )
 
     try:
-        raw_response = _dispatch(plan, kubernetes, incident.evidence.namespace if incident.evidence else "default")
+        raw_response = _dispatch(plan, kubernetes, incident.evidence.namespace)
         success = True
         message = f"{plan.action.value} on {plan.target} succeeded"
     except Exception as exc:

@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from kubernetes import client as k8s_client_lib
 
 from agent.k8s_client import MAX_REPLICAS, LiveEvidenceReader, LiveKubernetesClient
 
@@ -34,6 +35,10 @@ class FakeAppsApi:
         self._container = container
         self._generation = generation
         self.selector_used = None
+        # A real ApiClient for sanitize_for_serialization -- pure data
+        # transformation, no network I/O -- so the fake exposes the same
+        # `.api_client` attribute the real AppsV1Api does.
+        self.api_client = k8s_client_lib.ApiClient()
         # revision -> pod template (plain dicts, as the API serialises them)
         self.templates = {
             "1": _template("ticketbooking:0.9"),
@@ -174,6 +179,27 @@ class TestRollback:
         with pytest.raises(ValueError, match="cannot restore"):
             k8s.rollback_deployment("ticket-booking", "opspilot")
         assert api.patches == []
+
+    def test_reuses_the_loaded_client_rather_than_a_fresh_one(
+        self, k8s, api, monkeypatch
+    ):
+        """
+        A bare client.ApiClient() here would re-read kubeconfig a second
+        time, separate from the one loaded for self._apps -- flagged by a
+        security audit.
+        """
+        _revisions(monkeypatch, [
+            _rev("3", "ticketbooking:1.1", is_current=True),
+            _rev("2", "ticketbooking:1.0"),
+        ])
+        constructed = []
+        original = k8s_client_lib.ApiClient
+        monkeypatch.setattr(
+            k8s_client_lib, "ApiClient",
+            lambda *a, **kw: constructed.append(1) or original(*a, **kw),
+        )
+        k8s.rollback_deployment("ticket-booking", "opspilot")
+        assert constructed == []
 
     def test_explicit_revision_is_honoured(self, k8s, monkeypatch):
         _revisions(monkeypatch, [

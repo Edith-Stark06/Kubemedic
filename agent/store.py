@@ -11,14 +11,31 @@ exactly the human decisions the product is about, left no trace.
 WHAT IT STORES
 --------------
 incidents     the current state of each incident, as JSON.
-audit_events  every entry of every incident's audit log, append-only, in a hash
-              chain: each row's hash covers the previous row's hash and its own
-              content. Editing or deleting a past row breaks every hash after it,
-              and `verify_chain()` says where.
+audit_events  every entry of every incident's audit log, append-only, in ONE
+              hash chain shared across every incident, not one chain per
+              incident: each row's hash covers the previous row's hash --
+              the previous row *in insertion order overall*, whichever
+              incident it belongs to -- and its own content. Editing or
+              deleting a past row breaks every hash after it, and
+              `verify_chain()` says where.
+
+              This is deliberate, not an oversight: a chain scoped per
+              incident_id would let an attacker forge one incident's entire
+              history in isolation, needing only that incident's own prior
+              head. Sharing one chain across all incidents means forging
+              incident X's history also requires re-deriving every row of
+              every OTHER incident recorded after that point, because their
+              stored prev_hash values point at hashes that no longer exist.
+              tests/test_auth_and_store.py has a test proving this: deleting
+              one event from incident A is caught even though incident B's
+              rows are never touched. A security-focused Bob audit session
+              proposed scoping the chain per incident as a fix for a
+              perceived flaw; verified against this test before deciding not
+              to take it -- that "fix" would have removed the property above.
 
 A hash chain is tamper-EVIDENT, not tamper-proof: someone with write access to
-the database can rewrite the whole chain. For that, ship the head hash
-(`chain_head()`) somewhere the database's writer cannot reach.
+the database can rewrite the whole chain, given enough of it. For that, ship
+the head hash (`chain_head()`) somewhere the database's writer cannot reach.
 
 SQLite is the right size for one process on one node. It is a deliberate seam:
 the same interface over Postgres is the production step.

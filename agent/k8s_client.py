@@ -192,7 +192,11 @@ class LiveKubernetesClient:
                 f"No ReplicaSet recorded revision {revision} of {namespace}/{name}; "
                 "cannot restore its pod template"
             )
-        template = client.ApiClient().sanitize_for_serialization(found.spec.template)
+        # Reuse the client already loaded for self._apps rather than
+        # constructing a fresh ApiClient() here, which would re-read
+        # kubeconfig a second time and could diverge from it if the
+        # environment's config changed between the two constructions.
+        template = self._apps.api_client.sanitize_for_serialization(found.spec.template)
         # The controller adds this label to tell ReplicaSets apart; it is not
         # part of the desired template.
         labels = (template.get("metadata") or {}).get("labels") or {}

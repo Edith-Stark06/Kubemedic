@@ -91,10 +91,16 @@ class TestExecutor:
         k8s.rollback_deployment.assert_called_once()
 
     def test_incident_without_evidence_is_refused(self):
+        """
+        Checked directly, not inferred from plan.target != None happening to
+        be true -- flagged by a security audit as relying on a coincidence
+        of RemediationPlan.target being a required field rather than an
+        explicit guarantee.
+        """
         inc = _approved_incident()
         inc.evidence = None
         k8s = _fake_k8s()
-        with pytest.raises(ValueError, match="not the workload"):
+        with pytest.raises(ValueError, match="no evidence snapshot"):
             execute(inc, k8s)
         k8s.rollback_deployment.assert_not_called()
 

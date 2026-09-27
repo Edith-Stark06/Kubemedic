@@ -303,3 +303,63 @@ class TestAuditChain:
         s = IncidentStore(tmp_path / "empty.db")
         assert s.verify_chain() == (True, None)
         assert s.chain_head() == "0" * 64
+
+    def test_the_chain_is_shared_across_incidents_by_design(self, tmp_path):
+        """
+        A security-focused Bob audit session proposed scoping prev_hash per
+        incident_id, on the theory that a global chain lets events from
+        different incidents be silently swapped. It does not: deleting one
+        incident's event is caught even though a different incident's rows
+        are never touched, because whichever row comes next in insertion
+        order -- regardless of which incident it belongs to -- has a
+        prev_hash pointing at the hash that no longer exists. Scoping the
+        chain per incident, as proposed, would remove exactly this property:
+        an attacker could then forge one incident's history in isolation.
+        """
+        from tests.test_lifecycle import _analysed_incident
+
+        s = IncidentStore(tmp_path / "shared-chain.db")
+
+        a = _analysed_incident("INC-SHARED-A")
+        a.audit_log.extend([{"step": "a1"}, {"step": "a2"}])
+        s.save(a)
+
+        b = _analysed_incident("INC-SHARED-B")
+        b.audit_log.append({"step": "b1"})
+        s.save(b)
+
+        a.audit_log.append({"step": "a3"})
+        s.save(a)
+
+        assert s.verify_chain() == (True, None)
+
+        conn = sqlite3.connect(s.path)
+        conn.execute(
+            "DELETE FROM audit_events WHERE incident_id = ? AND idx = 1",
+            ("INC-SHARED-A",),
+        )
+        conn.commit()
+        conn.close()
+
+        intact, broken_at = s.verify_chain()
+        assert intact is False
+        assert broken_at is not None
+
+
+class TestInsecureBind:
+    """
+    main() used to print a warning and start anyway when bound to a
+    non-loopback address with auth off -- flagged by a security audit as
+    advisory rather than blocking. insecure_bind() is the pure policy check
+    main() now refuses to start on.
+    """
+
+    def test_loopback_with_no_auth_is_fine(self):
+        for host in ("127.0.0.1", "localhost", "::1"):
+            assert api.insecure_bind(host, auth_is_required=False) is False
+
+    def test_non_loopback_with_no_auth_is_refused(self):
+        assert api.insecure_bind("0.0.0.0", auth_is_required=False) is True
+
+    def test_non_loopback_is_fine_once_auth_is_required(self):
+        assert api.insecure_bind("0.0.0.0", auth_is_required=True) is False
