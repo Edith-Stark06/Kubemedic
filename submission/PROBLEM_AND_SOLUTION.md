@@ -4,14 +4,15 @@
 
 A bad Kubernetes deployment does not announce itself as one failure. It arrives
 as a stalled rollout, pods that never become ready, and a checkout page
-returning errors, each filed separately, none naming the cause. Someone then has
-to recognise these as one incident, work out what changed, and decide what to
-do, at a bad hour, under pressure. That is the slow part of post-deploy
-regression triage, and it is where outages get longer.
+returning errors, each filed separately, none naming the cause. The on-call
+engineer or SRE — our target user — then has to recognise these as one
+incident, work out what changed, and decide what to do, at a bad hour, under
+pressure. That is the slow part of post-deploy regression triage, and it is
+where outages get longer.
 
 The usual answer is to let a model fix it. Most teams won't run that on anything
-that matters: a model can be confidently wrong, removing the person who would
-have caught it, and it cannot prove the fix worked.
+that matters: a model can be confidently wrong, removes the person who would
+have caught it, and cannot prove the fix worked.
 
 ## Solution
 
@@ -26,8 +27,9 @@ human-authorised.
    with contradicting evidence, a root cause labelled as inference, one action
    from a closed list of three, and an impact assessment: blast radius, risk,
    reversibility, and how recovery will be checked.
-4. **A human decides.** Approve, or reject with a mandatory reason. The reason
-   goes back to Bob, which revises the plan.
+4. **The engineer decides**, in a plain operator console: the evidence, Bob's
+   reasoning, and the plan, side by side. Approve, or reject with a mandatory
+   reason. The reason goes back to Bob, which revises the plan.
 5. **Bounded execution.** Only after approval, one allowlisted action through
    the Kubernetes API. No shell, no model-composed command. A rollback restores
    the whole pod template.
@@ -45,7 +47,7 @@ human-authorised.
 
 ## Evidence
 
-465 tests run without a cluster. A live-cluster run asserts the whole loop: an
+470 tests run without a cluster. A live-cluster run asserts the whole loop: an
 unapproved execution is refused with the cluster unchanged, a reasonless
 rejection is refused, a real rollback executes, and both recovery signals pass.
 During the incident `/health` stays 200 because old pods keep serving; only the
@@ -54,6 +56,6 @@ rollout signal catches it. That is why verification needs two signals.
 ## Honest limits
 
 The project began before this hackathon; this window added the hardening above
-and the Bob 2.0 integration. Correlated tickets come from one watcher about one
-deployment, so many-to-one is shown on staged input. Prompt injection is reduced,
-not eliminated. It handles one workload, one replica.
+and the Bob 2.0 integration. Tickets come from one watcher on one deployment,
+so many-to-one is shown on staged input. Prompt injection is reduced, not
+eliminated. One workload, one replica.
