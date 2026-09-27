@@ -11,7 +11,7 @@ human in the loop
 | Problem and solution statement (≤ 500 words) | [`PROBLEM_AND_SOLUTION.md`](PROBLEM_AND_SOLUTION.md) | Written |
 | IBM Bob usage statement (≤ 500 words) | [`HOW_WE_USED_IBM_BOB.md`](HOW_WE_USED_IBM_BOB.md) | Written |
 | IBM Bob task-session summary screenshots, each member | [`bob-report/`](bob-report/) | **Not yet captured** |
-| Video demonstration (≤ 3 min, ≥ 90 s of the solution running) | — | **Not yet recorded** |
+| Video demonstration (≤ 3 min, ≥ 90 s of the solution running) | script: [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md) | **Script ready; not yet recorded** |
 | Demo application platform and URL | — | **Not yet hosted** |
 | Cover image, slide deck, tags | — | **Not yet made** |
 
