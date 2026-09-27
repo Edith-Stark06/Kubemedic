@@ -968,11 +968,16 @@ def main() -> None:  # pragma: no cover
             f"Stop-Process -Id {holder} -Force" if sys.platform == "win32"
             else f"kill {holder}"
         )
+        other_port = (
+            '$env:KUBEMEDIC_API_PORT = "8101"; python -m agent.api'
+            if sys.platform == "win32"
+            else "KUBEMEDIC_API_PORT=8101 python -m agent.api"
+        )
         lines = [
             f"Port {port} is already in use by {who}.",
             "",
             f"  Stop it:         {kill}",
-            "  Or use another:  KUBEMEDIC_API_PORT=8101 python -m agent.api",
+            f"  Or use another:  {other_port}",
             "",
             "If that is an older KubeMedic server, the console it serves is",
             "running the code it was started with, not the code on disk.",
